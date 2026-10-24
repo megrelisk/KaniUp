@@ -5,13 +5,13 @@ export function Avatar({ avatar, size = 32, title }: { avatar: string; size?: nu
   return (
     <span
       title={title}
-      className="inline-flex shrink-0 items-center justify-center rounded-full ring-2 ring-white/10"
+      className="inline-flex shrink-0 items-center justify-center rounded-full"
       style={{
         width: size,
         height: size,
         fontSize: size * 0.58,
-        background: `radial-gradient(circle at 30% 25%, ${a.from}, ${a.to})`,
-        boxShadow: `0 0 ${size / 3}px ${a.from}55`,
+        background: `${a.from}33`,
+        border: `1px solid ${a.from}66`,
       }}
     >
       {a.emoji}

@@ -22,7 +22,7 @@ export function PriorityIcon({ value }: { value: string }) {
 }
 
 export function XpChip({ xp }: { xp: number }) {
-  return <span className="chip border-amber-300/40 bg-amber-300/10 text-amber-300">🪙 {xp}</span>;
+  return <span className="chip border-amber-500/40 bg-amber-500/10 text-amber-500">🪙 {xp}</span>;
 }
 
 export function DueLabel({ due, done }: { due: string | null; done?: boolean }) {
@@ -34,7 +34,7 @@ export function DueLabel({ due, done }: { due: string | null; done?: boolean }) 
   const today = isSameTbilisiDay(d, now);
   const text = today ? t.today : formatDay(d, locale);
   return (
-    <span className={`text-xs ${overdue ? "font-bold text-rose-400" : today ? "font-semibold text-amber-300" : "muted"}`} title={formatDateTime(d, locale)}>
+    <span className={`text-xs ${overdue ? "font-bold text-rose-400" : today ? "font-semibold text-amber-500" : "muted"}`} title={formatDateTime(d, locale)}>
       {overdue ? "⏰" : "📅"} {text}
     </span>
   );

@@ -64,7 +64,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           <div
             key={x.id}
             className={`pop-in panel flex items-center gap-2 px-4 py-2.5 text-sm font-semibold shadow-xl ${
-              x.kind === "xp" ? "text-amber-300" : x.kind === "achievement" ? "text-fuchsia-300" : x.kind === "error" ? "text-rose-400" : ""
+              x.kind === "xp" ? "text-amber-500" : x.kind === "achievement" ? "text-violet-500" : x.kind === "error" ? "text-rose-400" : ""
             }`}
           >
             {x.icon && <span className="text-xl">{x.icon}</span>}
@@ -76,7 +76,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4" onClick={() => setLevelUp(null)}>
           <div className="panel pop-in max-w-sm p-8 text-center">
             <div className="text-6xl">🚀</div>
-            <div className="neon-text mt-3 font-[family-name:var(--font-display)] text-3xl font-extrabold">{t.levelUp}</div>
+            <div className="mt-3 font-[family-name:var(--font-display)] text-3xl font-extrabold text-[var(--accent)]">{t.levelUp}</div>
             <div className="mt-2 text-5xl font-extrabold">{levelUp}</div>
             <div className="muted mt-2">{titleForLevel(levelUp)[locale]}</div>
             <button className="btn btn-primary mt-6">OK</button>

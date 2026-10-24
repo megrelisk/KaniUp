@@ -4,8 +4,9 @@ import { createContext, useContext } from "react";
 import type { Dict, Locale } from "@/lib/i18n";
 
 export type CrewMember = { id: string; name: string; email: string; avatar: string };
+export type RoleInfo = { id: string; name: string; nameEn: string; icon: string; scopedOnly: boolean };
 
-type Ui = { t: Dict; locale: Locale; me: { id: string; role: string }; crew: CrewMember[]; canManageStructure: boolean };
+type Ui = { t: Dict; locale: Locale; me: { id: string }; crew: CrewMember[]; roles: RoleInfo[]; canManageStructure: boolean };
 
 const UiCtx = createContext<Ui | null>(null);
 

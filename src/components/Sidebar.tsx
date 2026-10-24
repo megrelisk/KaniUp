@@ -102,7 +102,7 @@ function NavLink({ href, icon, label, onNavigate }: { href: string; icon: string
       href={href}
       onClick={onNavigate}
       className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 font-medium transition ${
-        active ? "bg-[var(--bg-soft)] text-[var(--accent)] shadow-[inset_3px_0_0_var(--accent)]" : "hover:bg-[var(--bg-soft)]"
+        active ? "bg-[var(--bg-soft)] text-[var(--accent)] font-semibold" : "hover:bg-[var(--bg-soft)]"
       }`}
     >
       <span className="text-base">{icon}</span>
@@ -134,7 +134,7 @@ function GalaxyItem({ galaxy, ctx }: { galaxy: GalaxyNode; ctx: Ctx }) {
   const [open, toggle] = useToggle(`g:${galaxy.id}`);
   const drop = useDroppable({ id: `g-${galaxy.id}`, data: { galaxyId: galaxy.id, folderId: null } satisfies DropTarget });
   return (
-    <div ref={drop.setNodeRef} className={`rounded-lg ${drop.isOver ? "bg-[var(--glow)]" : ""}`}>
+    <div ref={drop.setNodeRef} className={`rounded-lg ${drop.isOver ? "bg-[var(--accent-soft)]" : ""}`}>
       <Row
         icon={galaxy.icon}
         label={galaxy.name}
@@ -175,7 +175,7 @@ function FolderItem({ folder, galaxyId, ctx }: { folder: FolderNode; galaxyId: s
   const drop = useDroppable({ id: `f-${folder.id}`, data: { galaxyId, folderId: folder.id } satisfies DropTarget });
   const drag = useDraggable({ id: `df-${folder.id}`, data: { type: "folder", id: folder.id } });
   return (
-    <div ref={drop.setNodeRef} className={`rounded-lg ${drop.isOver ? "bg-[var(--glow)]" : ""} ${drag.isDragging ? "opacity-40" : ""}`}>
+    <div ref={drop.setNodeRef} className={`rounded-lg ${drop.isOver ? "bg-[var(--accent-soft)]" : ""} ${drag.isDragging ? "opacity-40" : ""}`}>
       <div ref={drag.setNodeRef} {...drag.listeners} {...drag.attributes}>
         <Row
           icon="☀️"
@@ -206,7 +206,7 @@ function PlanetItem({ planet, onNavigate }: { planet: PlanetNode; onNavigate?: (
         onClick={onNavigate}
         className={`group flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${active ? "bg-[var(--bg-soft)] text-[var(--accent)]" : "hover:bg-[var(--bg-soft)]"}`}
       >
-        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: planet.color, boxShadow: `0 0 8px ${planet.color}` }} />
+        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: planet.color }} />
         <span className="flex-1 truncate">{planet.name}</span>
         {planet.open > 0 && <span className="muted text-xs">{planet.open}</span>}
       </Link>

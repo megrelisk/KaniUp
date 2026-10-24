@@ -1,5 +1,5 @@
 import type { ScopeOption } from "@/components/admin/AdminUi";
-import { loadTree } from "./access";
+import { loadTree } from "./data";
 
 /** Every galaxy / solar system / planet as a pickable scope for invites and permissions. */
 export async function scopeOptions(): Promise<ScopeOption[]> {

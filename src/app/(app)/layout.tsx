@@ -1,32 +1,28 @@
 import { cookies } from "next/headers";
-import { signOut } from "@/auth";
 import { GameProvider } from "@/components/Game";
 import { Shell } from "@/components/Shell";
 import type { FolderNode, GalaxyNode, PlanetNode } from "@/components/Sidebar";
 import { UiProvider } from "@/components/UiContext";
-import { isAdmin, loadTree, userCan, visiblePlanetIds } from "@/lib/access";
-import { db } from "@/lib/db";
+import { isAdmin, userCan, visiblePlanetIds } from "@/lib/access";
+import { loadRoles, loadTree, loadUsers, tasksOfPlanets } from "@/lib/data";
 import { activeStreak, levelProgress, tbilisiDay, titleForLevel } from "@/lib/game";
 import { getDict, getLocale, requireUser } from "@/lib/session";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  const [t, locale, tree, visible, crew, theme] = await Promise.all([
+  const [t, locale, tree, visible, crew, roles, theme] = await Promise.all([
     getDict(),
     getLocale(),
     loadTree(),
     visiblePlanetIds(user),
-    db.user.findMany({ where: { deactivatedAt: null }, orderBy: { name: "asc" } }),
+    loadUsers(),
+    loadRoles(),
     cookies().then((c) => (c.get("theme")?.value === "light" ? "light" : "dark")),
   ]);
-  const canManageStructure = await userCan(user, "MANAGE_STRUCTURE", []);
+  const [canManageStructure, admin, tasks] = await Promise.all([userCan(user, "MANAGE_STRUCTURE", []), isAdmin(user), tasksOfPlanets(visible)]);
 
-  const openCounts = await db.task.groupBy({
-    by: ["planetId"],
-    where: { deletedAt: null, parentId: null, completedAt: null, planetId: { in: visible } },
-    _count: true,
-  });
-  const openBy = new Map(openCounts.map((c) => [c.planetId, c._count]));
+  const openBy = new Map<string, number>();
+  for (const task of tasks) if (!task.parentId && !task.completedAt) openBy.set(task.planetId, (openBy.get(task.planetId) ?? 0) + 1);
   const visibleSet = new Set(visible);
 
   const planetNode = (p: (typeof tree.planets)[number]): PlanetNode => ({ id: p.id, name: p.name, icon: p.icon, color: p.color, open: openBy.get(p.id) ?? 0 });
@@ -55,8 +51,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       value={{
         t,
         locale,
-        me: { id: user.id, role: user.role },
-        crew: crew.map((u) => ({ id: u.id, name: u.name ?? u.email.split("@")[0], email: u.email, avatar: u.avatar })),
+        me: { id: user.id },
+        crew: crew.filter((u) => !u.deactivatedAt).map((u) => ({ id: u.id, name: u.name, email: u.email, avatar: u.avatar })),
+        roles: roles.map(({ id, name, nameEn, icon, scopedOnly }) => ({ id, name, nameEn, icon, scopedOnly })),
         canManageStructure,
       }}
     >
@@ -65,19 +62,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           galaxies={galaxies}
           theme={theme}
           me={{
-            name: user.name ?? user.email.split("@")[0],
+            name: user.name,
             avatar: user.avatar,
             xp: user.xp,
             level: progress.level,
             current: progress.current,
             needed: progress.needed,
             title: titleForLevel(progress.level)[locale],
-            streak: activeStreak(user.streak, user.lastStreakDay?.toISOString().slice(0, 10) ?? null, tbilisiDay(new Date())),
-            isAdmin: isAdmin(user),
-          }}
-          signOut={async () => {
-            "use server";
-            await signOut({ redirectTo: "/login" });
+            streak: activeStreak(user.streak, user.lastStreakDay, tbilisiDay(new Date())),
+            isAdmin: admin,
           }}
         >
           {children}

@@ -82,6 +82,22 @@ const ka = {
   xpShares: "XP-ის განაწილება",
   close: "დახურვა",
   unassigned: "მიუბმელი",
+  timeSpent: "დრო",
+  startTimer: "დაწყება",
+  addTime: "დროის დამატება",
+  files: "ფაილები",
+  dropFiles: "ჩააგდე ფაილები აქ ან დააჭირე ასატვირთად",
+  settings: "პარამეტრები",
+  statuses: "სტატუსები",
+  customFields: "დამატებითი ველები",
+  addStatus: "სტატუსის დამატება",
+  addField: "ველის დამატება",
+  newRole: "ახალი როლი",
+  roleInUse: "როლი გამოიყენება — ჯერ შეცვალე წევრების როლი",
+  guestOnly: "ხედავს მხოლოდ იმას, სადაც მოიწვიეს",
+  access: "წვდომა",
+  signingIn: "შესვლა...",
+  emailLinkPrompt: "დაადასტურე მეილი, რომელზეც ლინკი მოგივიდა",
 };
 
 export type Dict = typeof ka;
@@ -167,6 +183,22 @@ const en: Dict = {
   xpShares: "XP split",
   close: "Close",
   unassigned: "Unassigned",
+  timeSpent: "Time",
+  startTimer: "Start",
+  addTime: "Add time",
+  files: "Files",
+  dropFiles: "Drop files here or click to upload",
+  settings: "Settings",
+  statuses: "Statuses",
+  customFields: "Custom fields",
+  addStatus: "Add status",
+  addField: "Add field",
+  newRole: "New role",
+  roleInUse: "Role is in use — change members' role first",
+  guestOnly: "Sees only places they were invited to",
+  access: "Access",
+  signingIn: "Signing in...",
+  emailLinkPrompt: "Confirm the email the link was sent to",
 };
 
 export const DICTS: Record<Locale, Dict> = { ka, en };
@@ -217,11 +249,11 @@ export const PERMISSION_LABEL: Record<Locale, Record<string, string>> = {
 };
 
 export const DIFFICULTY_STYLE: Record<string, string> = {
-  EASY: "text-emerald-400 border-emerald-400/40 bg-emerald-400/10",
+  EASY: "text-emerald-500 border-emerald-500/40 bg-emerald-500/10",
   NORMAL: "text-sky-400 border-sky-400/40 bg-sky-400/10",
   HARD: "text-amber-400 border-amber-400/40 bg-amber-400/10",
   EPIC: "text-fuchsia-400 border-fuchsia-400/40 bg-fuchsia-400/10",
-  LEGENDARY: "text-orange-300 border-orange-300/60 bg-gradient-to-r from-orange-500/20 to-yellow-400/20 legendary-glow",
+  LEGENDARY: "text-orange-400 border-orange-400/50 bg-orange-400/10",
 };
 
 export const PRIORITY_ICON: Record<string, string> = { LOW: "⬇️", NORMAL: "➖", HIGH: "⬆️", URGENT: "🚨" };

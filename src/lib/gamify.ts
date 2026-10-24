@@ -1,75 +1,65 @@
-import { db } from "./db";
+import "server-only";
+import { all, col, FieldValue, now, one } from "./data";
 import { levelFromXp, nextStreak, splitXp, STREAK_MILESTONES, tbilisiDay } from "./game";
+import type { TaskDoc, UserDoc, XpEventDoc } from "./types";
 
 export type Reward = { userId: string; xp: number; levelUp?: number; achievements: string[] };
 
-async function unlock(userId: string, keys: string[]): Promise<string[]> {
-  if (!keys.length) return [];
-  const existing = await db.userAchievement.findMany({ where: { userId, key: { in: keys } } });
-  const fresh = keys.filter((k) => !existing.some((e) => e.key === k));
-  if (fresh.length) await db.userAchievement.createMany({ data: fresh.map((key) => ({ userId, key })) });
+async function unlock(user: UserDoc, keys: string[]): Promise<string[]> {
+  const fresh = [...new Set(keys)].filter((k) => !user.achievements?.[k]);
+  if (fresh.length) {
+    const at = now();
+    await col.users().doc(user.id).update(Object.fromEntries(fresh.map((k) => [`achievements.${k}`, at])));
+  }
   return fresh;
 }
 
-/** Called when an assignee hands work in (moves a task to Review): advances their streak. */
+/** Called when an assignee hands work in (moves a task to In Review): advances their streak. */
 export async function recordHandIn(userId: string): Promise<string[]> {
-  const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
+  const user = await one<UserDoc>(col.users().doc(userId));
+  if (!user) return [];
   const today = tbilisiDay(new Date());
-  const last = user.lastStreakDay ? user.lastStreakDay.toISOString().slice(0, 10) : null;
-  const streak = nextStreak(user.streak, last, today);
-  await db.user.update({
-    where: { id: userId },
-    data: { streak, bestStreak: Math.max(user.bestStreak, streak), lastStreakDay: new Date(today) },
-  });
-  return unlock(userId, STREAK_MILESTONES.filter(([n]) => streak >= n).map(([, key]) => key));
+  const streak = nextStreak(user.streak, user.lastStreakDay, today);
+  await col.users().doc(userId).update({ streak, bestStreak: Math.max(user.bestStreak, streak), lastStreakDay: today });
+  return unlock(user, STREAK_MILESTONES.filter(([n]) => streak >= n).map(([, key]) => key));
 }
 
 /** Called when a task reaches Done: pays out XP to assignees according to their shares. */
-export async function payOut(taskId: string): Promise<Reward[]> {
-  const task = await db.task.findUniqueOrThrow({ where: { id: taskId }, include: { assignees: { orderBy: { assignedAt: "asc" } } } });
-  if (!task.assignees.length) return [];
-  const parts = splitXp(task.xp, task.assignees.map((a) => a.xpShare));
+export async function payOut(task: TaskDoc): Promise<Reward[]> {
+  if (!task.assigneeIds.length) return [];
+  const parts = splitXp(task.xp, task.assigneeIds.map((id) => task.xpShares[id] ?? 0));
+  const handedIn = task.reviewedAt ?? now();
   const rewards: Reward[] = [];
-  for (const [i, a] of task.assignees.entries()) {
+  for (const [i, userId] of task.assigneeIds.entries()) {
+    const user = await one<UserDoc>(col.users().doc(userId));
+    if (!user) continue;
     const amount = parts[i];
-    const before = await db.user.findUniqueOrThrow({ where: { id: a.userId } });
-    const after = await db.user.update({ where: { id: a.userId }, data: { xp: { increment: amount } } });
-    await db.xpEvent.create({ data: { userId: a.userId, taskId, amount, reason: "task_done" } });
+    await col.users().doc(userId).update({ xp: FieldValue.increment(amount) });
+    await col.xpEvents().add({ userId, taskId: task.id, amount, difficulty: task.difficulty, reason: "task_done", createdAt: now() } satisfies Omit<XpEventDoc, "id">);
 
-    const doneCount = await db.xpEvent.count({ where: { userId: a.userId, reason: "task_done" } });
-    const handedIn = task.reviewedAt ?? new Date();
-    const keys: string[] = [];
-    if (doneCount >= 1) keys.push("first_mission");
+    const done = await all<XpEventDoc>(col.xpEvents().where("userId", "==", userId));
+    const doneCount = done.filter((e) => e.reason === "task_done").length;
+    const keys = ["first_mission"];
     if (doneCount >= 50) keys.push("tasks_50");
     if (task.difficulty === "LEGENDARY") keys.push("legendary_1");
     if (task.dueDate && handedIn <= task.dueDate) {
-      const onTime = await db.task.count({
-        where: {
-          assignees: { some: { userId: a.userId } },
-          completedAt: { not: null },
-          reviewedAt: { lte: db.task.fields.dueDate },
-          deletedAt: null,
-        },
-      });
-      if (onTime >= 10) keys.push("on_time_10");
+      // Count tasks handed in by their deadline; stored on the user to avoid scanning tasks.
+      await col.users().doc(userId).update({ onTimeCount: FieldValue.increment(1) });
+      const count = ((await col.users().doc(userId).get()).data()?.onTimeCount ?? 1) as number;
+      if (count >= 10) keys.push("on_time_10");
     }
-    const levelBefore = levelFromXp(before.xp);
-    const levelAfter = levelFromXp(after.xp);
-    rewards.push({
-      userId: a.userId,
-      xp: amount,
-      levelUp: levelAfter > levelBefore ? levelAfter : undefined,
-      achievements: await unlock(a.userId, keys),
-    });
+    const levelBefore = levelFromXp(user.xp);
+    const levelAfter = levelFromXp(user.xp + amount);
+    rewards.push({ userId, xp: amount, levelUp: levelAfter > levelBefore ? levelAfter : undefined, achievements: await unlock(user, keys) });
   }
   return rewards;
 }
 
 /** Reverses a payout when a task leaves Done. */
 export async function revokePayout(taskId: string) {
-  const events = await db.xpEvent.findMany({ where: { taskId, reason: "task_done" } });
-  for (const e of events) {
-    await db.user.update({ where: { id: e.userId }, data: { xp: { decrement: e.amount } } });
+  const events = await all<XpEventDoc>(col.xpEvents().where("taskId", "==", taskId));
+  for (const e of events.filter((x) => x.reason === "task_done")) {
+    await col.users().doc(e.userId).update({ xp: FieldValue.increment(-e.amount) });
+    await col.xpEvents().doc(e.id).delete();
   }
-  await db.xpEvent.deleteMany({ where: { taskId, reason: "task_done" } });
 }

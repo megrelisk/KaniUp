@@ -1,5 +1,7 @@
-import type { Role, ScopeType } from "@prisma/client";
-import { db } from "./db";
+import "server-only";
+import { col, all, now } from "./data";
+import { DEFAULT_ROLE_ID } from "./roles";
+import type { InvitationDoc, UserDoc } from "./types";
 
 export const INVITE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -10,41 +12,52 @@ export function ownerEmails(): string[] {
     .filter(Boolean);
 }
 
-export function pendingInvitation(email: string) {
-  return db.invitation.findFirst({
-    where: { email: email.toLowerCase(), acceptedAt: null, expiresAt: { gt: new Date() } },
-    orderBy: { createdAt: "desc" },
-  });
+export async function pendingInvitation(email: string) {
+  const invites = await all<InvitationDoc>(col.invitations().where("email", "==", email.toLowerCase()));
+  return invites
+    .filter((i) => !i.acceptedAt && i.expiresAt > now())
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
 }
 
-/** Applies a pending invitation (role + scoped grant) to a freshly signed-in user. */
-export async function acceptInvitation(userId: string, email: string) {
+/** Whether this email may sign in: existing active crew, configured owners, or a pending invitation. */
+export async function mayEnter(email: string) {
   const lower = email.toLowerCase();
-  if (ownerEmails().includes(lower)) {
-    await db.user.update({ where: { id: userId }, data: { role: "OWNER" } });
-    return;
-  }
-  const invite = await pendingInvitation(lower);
-  if (!invite) return;
-  await db.$transaction(async (tx) => {
-    if (invite.scopeType && invite.scopeId) {
-      // A scoped invite: the role applies inside that place; elsewhere the user is a guest
-      // when invited as a guest, otherwise a regular member.
-      await tx.user.update({ where: { id: userId }, data: { role: invite.role === "GUEST" ? "GUEST" : "MEMBER" } });
-      await grant(tx, userId, invite.role, invite.scopeType, invite.scopeId);
-    } else {
-      await tx.user.update({ where: { id: userId }, data: { role: invite.role } });
-    }
-    await tx.invitation.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
-  });
+  const existing = await all<UserDoc>(col.users().where("email", "==", lower));
+  if (existing.length) return !existing[0].deactivatedAt;
+  return ownerEmails().includes(lower) || Boolean(await pendingInvitation(lower));
 }
 
-type Tx = Parameters<Parameters<typeof db.$transaction>[0]>[0];
-
-function grant(tx: Tx, userId: string, role: Role, scopeType: ScopeType, scopeId: string) {
-  return tx.roleGrant.upsert({
-    where: { userId_scopeType_scopeId: { userId, scopeType, scopeId } },
-    create: { userId, role, scopeType, scopeId },
-    update: { role },
-  });
+/** Creates the crew member on first sign-in, applying their invitation (role + scoped grant). */
+export async function ensureMember(uid: string, email: string, displayName: string | null) {
+  const ref = col.users().doc(uid);
+  if ((await ref.get()).exists) return;
+  const lower = email.toLowerCase();
+  const isOwner = ownerEmails().includes(lower);
+  const invite = isOwner ? null : await pendingInvitation(lower);
+  let roleId = DEFAULT_ROLE_ID;
+  if (invite) {
+    if (invite.scopeType && invite.scopeId) {
+      // A scoped invite: the role applies inside that place only.
+      await col.grants().add({ userId: uid, roleId: invite.roleId, scopeType: invite.scopeType, scopeId: invite.scopeId });
+      roleId = "alien";
+    } else {
+      roleId = invite.roleId;
+    }
+    await col.invitations().doc(invite.id).update({ acceptedAt: now() });
+  }
+  await ref.set({
+    email: lower,
+    name: displayName || lower.split("@")[0],
+    avatar: "polar-bear",
+    roleId: isOwner ? "admin" : roleId,
+    isOwner,
+    xp: 0,
+    streak: 0,
+    bestStreak: 0,
+    lastStreakDay: null,
+    achievements: {},
+    phone: null,
+    deactivatedAt: null,
+    createdAt: now(),
+  } satisfies Omit<UserDoc, "id">);
 }

@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
+import { clientAuth } from "@/lib/firebase/client";
 import { useEffect, useState } from "react";
 import { setLocale, setTheme } from "@/app/actions/prefs";
 import { Avatar } from "./Avatar";
@@ -10,10 +13,16 @@ import { useUi } from "./UiContext";
 
 type Me = { name: string; avatar: string; xp: number; level: number; current: number; needed: number; title: string; streak: number; isAdmin: boolean };
 
-export function Shell({ galaxies, me, theme, signOut, children }: { galaxies: GalaxyNode[]; me: Me; theme: string; signOut: () => Promise<void>; children: React.ReactNode }) {
+export function Shell({ galaxies, me, theme, children }: { galaxies: GalaxyNode[]; me: Me; theme: string; children: React.ReactNode }) {
   const { t, locale } = useUi();
   const [drawer, setDrawer] = useState(false);
   const [muted, setMutedState] = useState(false);
+  const router = useRouter();
+  async function logout() {
+    await fetch("/api/session", { method: "DELETE" });
+    await signOut(clientAuth()).catch(() => {});
+    router.replace("/login");
+  }
   useEffect(() => {
     setMutedState(isMuted());
   }, []);
@@ -32,6 +41,9 @@ export function Shell({ galaxies, me, theme, signOut, children }: { galaxies: Ga
             <Logo />
             <Sidebar galaxies={galaxies} onNavigate={() => setDrawer(false)} />
             {me.isAdmin && <AdminLinks onNavigate={() => setDrawer(false)} />}
+            <button className="muted border-t border-[var(--border)] p-4 text-left text-sm" onClick={logout}>
+              ⏻ {t.signOut}
+            </button>
           </aside>
         </div>
       )}
@@ -60,7 +72,7 @@ export function Shell({ galaxies, me, theme, signOut, children }: { galaxies: Ga
             </div>
           </Link>
           {me.streak > 0 && (
-            <span className="chip border-orange-400/40 text-orange-300" title={t.streak}>
+            <span className="chip border-orange-500/40 text-orange-500" title={t.streak}>
               🔥 {me.streak}
             </span>
           )}
@@ -80,11 +92,9 @@ export function Shell({ galaxies, me, theme, signOut, children }: { galaxies: Ga
           <button className="btn btn-ghost px-2.5 text-xs" title={t.language} onClick={() => setLocale(locale === "ka" ? "en" : "ka")}>
             {locale === "ka" ? "EN" : "ქა"}
           </button>
-          <form action={signOut}>
-            <button className="btn btn-ghost hidden px-2.5 sm:inline-flex" title={t.signOut}>
-              ⏻
-            </button>
-          </form>
+          <button className="btn btn-ghost hidden px-2.5 sm:inline-flex" title={t.signOut} onClick={logout}>
+            ⏻
+          </button>
         </header>
         <main className="min-h-0 flex-1 overflow-auto px-2 pb-2">{children}</main>
       </div>
@@ -96,7 +106,7 @@ function Logo() {
   return (
     <Link href="/" className="flex items-center gap-2 px-4 pt-4 pb-2">
       <span className="text-2xl">🪐</span>
-      <span className="neon-text font-[family-name:var(--font-display)] text-xl font-extrabold tracking-wider">KaniUp</span>
+      <span className="brand font-[family-name:var(--font-display)] text-xl font-extrabold">KaniUp</span>
     </Link>
   );
 }

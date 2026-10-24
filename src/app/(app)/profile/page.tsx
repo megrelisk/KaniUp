@@ -1,25 +1,27 @@
 import { Avatar } from "@/components/Avatar";
 import { ProfileEditor } from "@/components/ProfileEditor";
-import { db } from "@/lib/db";
+import { all, col, loadRoles } from "@/lib/data";
 import { ACHIEVEMENTS, activeStreak, levelProgress, tbilisiDay, TITLES, titleForLevel } from "@/lib/game";
-import { ROLE_META } from "@/lib/roles";
+import { OWNER_META } from "@/lib/roles";
+import type { XpEventDoc } from "@/lib/types";
 import { getDict, getLocale, requireUser } from "@/lib/session";
 
 export default async function ProfilePage() {
   const user = await requireUser();
   const [t, locale] = [await getDict(), await getLocale()];
-  const unlocked = await db.userAchievement.findMany({ where: { userId: user.id } });
-  const done = await db.xpEvent.count({ where: { userId: user.id, reason: "task_done" } });
+  const [events, roles] = await Promise.all([all<XpEventDoc>(col.xpEvents().where("userId", "==", user.id)), loadRoles()]);
+  const done = events.filter((e) => e.reason === "task_done").length;
   const p = levelProgress(user.xp);
-  const role = ROLE_META[user.role];
-  const streak = activeStreak(user.streak, user.lastStreakDay?.toISOString().slice(0, 10) ?? null, tbilisiDay(new Date()));
+  const r = roles.find((x) => x.id === user.roleId);
+  const role = user.isOwner ? OWNER_META : { icon: r?.icon ?? "", ka: r?.name ?? "", en: r?.nameEn ?? "" };
+  const streak = activeStreak(user.streak, user.lastStreakDay, tbilisiDay(new Date()));
 
   return (
     <div className="space-y-5 p-2">
       <div className="panel flex flex-wrap items-center gap-5 p-5">
         <Avatar avatar={user.avatar} size={96} />
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold">{user.name ?? user.email}</h1>
+          <h1 className="text-2xl font-bold">{user.name}</h1>
           <div className="muted text-sm">
             {role.icon} {role[locale]} · {titleForLevel(p.level)[locale]}
           </div>
@@ -35,7 +37,7 @@ export default async function ProfilePage() {
         </div>
         <div className="flex gap-6 text-center">
           <div>
-            <div className="text-2xl font-extrabold text-amber-300">🪙 {user.xp}</div>
+            <div className="text-2xl font-extrabold text-amber-500">🪙 {user.xp}</div>
             <div className="muted text-xs">XP</div>
           </div>
           <div>
@@ -43,7 +45,7 @@ export default async function ProfilePage() {
             <div className="muted text-xs">{t.tasksDone}</div>
           </div>
           <div>
-            <div className="text-2xl font-extrabold text-orange-300">🔥 {streak}</div>
+            <div className="text-2xl font-extrabold text-orange-500">🔥 {streak}</div>
             <div className="muted text-xs">
               {t.streak} (max {user.bestStreak})
             </div>
@@ -55,9 +57,9 @@ export default async function ProfilePage() {
         <h2 className="mb-3 text-sm font-bold">🏅 {t.achievements}</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {ACHIEVEMENTS.map((a) => {
-            const got = unlocked.find((u) => u.key === a.key);
+            const got = user.achievements?.[a.key];
             return (
-              <div key={a.key} className={`rounded-xl border p-3 text-center ${got ? "border-fuchsia-400/50 bg-fuchsia-400/5 shadow-[0_0_14px_rgba(232,121,249,.2)]" : "border-[var(--border)] opacity-40 grayscale"}`}>
+              <div key={a.key} className={`rounded-xl border p-3 text-center ${got ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--border)] opacity-40 grayscale"}`}>
                 <div className="text-3xl">{a.icon}</div>
                 <div className="mt-1 text-sm font-bold">{a[locale]}</div>
                 <div className="muted text-xs">{locale === "ka" ? a.descKa : a.descEn}</div>
@@ -79,7 +81,7 @@ export default async function ProfilePage() {
       </section>
 
       <section className="panel p-5">
-        <ProfileEditor avatar={user.avatar} name={user.name ?? ""} />
+        <ProfileEditor avatar={user.avatar} name={user.name} />
       </section>
     </div>
   );

@@ -2,54 +2,71 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { db } from "@/lib/db";
-import { assertCan, taskPath } from "@/lib/access";
+import { col, FieldValue, getTaskOrThrow, loadUsers, now, one, ping } from "@/lib/data";
+import { assertCan, isAdmin, taskPath } from "@/lib/access";
 import { requireUser } from "@/lib/session";
+import type { CommentDoc } from "@/lib/types";
 
-export async function addComment(taskId: string, body: string, parentId?: string) {
+const body = z.string().trim().min(1).max(10_000);
+
+async function changed(taskId: string) {
+  revalidatePath("/", "layout");
+  await ping(`task-${taskId}`);
+}
+
+export async function addComment(taskId: string, text: string, parentId?: string) {
   const user = await requireUser();
-  const task = await db.task.findUniqueOrThrow({ where: { id: taskId } });
+  const task = await getTaskOrThrow(taskId);
   await assertCan(user, "COMMENT", await taskPath(task));
-  const text = z.string().trim().min(1).max(10_000).parse(body);
-  // @mentions are resolved against crew names / email local parts: "@nika".
-  const handles = [...text.matchAll(/@([\p{L}\p{N}._-]+)/gu)].map((m) => m[1].toLowerCase());
-  const mentioned = handles.length
-    ? (await db.user.findMany({ where: { deactivatedAt: null } })).filter((u) =>
-        handles.some((h) => u.email.toLowerCase().startsWith(h + "@") || u.name?.toLowerCase().replace(/\s+/g, "") === h),
-      )
-    : [];
-  await db.comment.create({
-    data: { taskId, authorId: user.id, body: text, parentId: parentId ?? null, mentions: mentioned.map((u) => u.id) },
-  });
-  revalidatePath("/", "layout");
+  const value = body.parse(text);
+  // @mentions resolve against email local parts: "@nika" → nika@kani.ge.
+  const handles = [...value.matchAll(/@([\p{L}\p{N}._-]+)/gu)].map((m) => m[1].toLowerCase());
+  const mentioned = handles.length ? (await loadUsers()).filter((u) => handles.some((h) => u.email.startsWith(h + "@"))) : [];
+  await col.comments(taskId).add({
+    taskId,
+    authorId: user.id,
+    parentId: parentId ?? null,
+    body: value,
+    system: false,
+    mentions: mentioned.map((u) => u.id),
+    reactions: {},
+    attachments: [],
+    editedAt: null,
+    deletedAt: null,
+    createdAt: now(),
+  } satisfies Omit<CommentDoc, "id">);
+  await col.tasks().doc(taskId).update({ commentCount: FieldValue.increment(1) });
+  await changed(taskId);
 }
 
-export async function editComment(commentId: string, body: string) {
+export async function editComment(taskId: string, commentId: string, text: string) {
   const user = await requireUser();
-  const comment = await db.comment.findUniqueOrThrow({ where: { id: commentId } });
-  if (comment.authorId !== user.id) throw new Error("forbidden");
-  await db.comment.update({
-    where: { id: commentId },
-    data: { body: z.string().trim().min(1).max(10_000).parse(body), editedAt: new Date() },
-  });
-  revalidatePath("/", "layout");
+  const comment = await one<CommentDoc>(col.comments(taskId).doc(commentId));
+  if (!comment || comment.authorId !== user.id) throw new Error("forbidden");
+  await col.comments(taskId).doc(commentId).update({ body: body.parse(text), editedAt: now() });
+  await changed(taskId);
 }
 
-export async function deleteComment(commentId: string) {
+export async function deleteComment(taskId: string, commentId: string) {
   const user = await requireUser();
-  const comment = await db.comment.findUniqueOrThrow({ where: { id: commentId } });
-  if (comment.authorId !== user.id && user.role !== "OWNER" && user.role !== "ADMIN") throw new Error("forbidden");
-  await db.comment.update({ where: { id: commentId }, data: { deletedAt: new Date() } });
-  revalidatePath("/", "layout");
+  const comment = await one<CommentDoc>(col.comments(taskId).doc(commentId));
+  if (!comment || (comment.authorId !== user.id && !(await isAdmin(user)))) throw new Error("forbidden");
+  await col.comments(taskId).doc(commentId).update({ deletedAt: now() });
+  if (!comment.deletedAt) await col.tasks().doc(taskId).update({ commentCount: FieldValue.increment(-1) });
+  await changed(taskId);
 }
 
-export async function toggleReaction(commentId: string, emoji: string) {
+export async function toggleReaction(taskId: string, commentId: string, emoji: string) {
   const user = await requireUser();
-  const comment = await db.comment.findUniqueOrThrow({ where: { id: commentId }, include: { task: true } });
-  await assertCan(user, "COMMENT", await taskPath(comment.task));
-  const key = { commentId_userId_emoji: { commentId, userId: user.id, emoji } };
-  const existing = await db.commentReaction.findUnique({ where: key });
-  if (existing) await db.commentReaction.delete({ where: key });
-  else await db.commentReaction.create({ data: { commentId, userId: user.id, emoji: emoji.slice(0, 8) } });
-  revalidatePath("/", "layout");
+  const task = await getTaskOrThrow(taskId);
+  await assertCan(user, "COMMENT", await taskPath(task));
+  const ref = col.comments(taskId).doc(commentId);
+  const comment = await one<CommentDoc>(ref);
+  if (!comment) throw new Error("not_found");
+  const e = emoji.slice(0, 8);
+  const users = comment.reactions[e] ?? [];
+  const reactions = { ...comment.reactions, [e]: users.includes(user.id) ? users.filter((u) => u !== user.id) : [...users, user.id] };
+  if (!reactions[e].length) delete reactions[e];
+  await ref.update({ reactions });
+  await changed(taskId);
 }

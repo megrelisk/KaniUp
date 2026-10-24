@@ -1,6 +1,6 @@
 "use client";
 
-import type { StatusKind } from "@prisma/client";
+import type { StatusKind } from "@/lib/types";
 import { useEffect, useId, useMemo, useState, useTransition } from "react";
 import {
   closestCorners,
@@ -130,15 +130,15 @@ function Column({ status, tasks, onOpen, planetId }: { status: StatusCol; tasks:
     <div
       ref={setNodeRef}
       className={`flex w-72 shrink-0 flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-soft)]/60 p-2 transition max-md:w-[85vw] max-md:snap-center ${
-        isOver ? "border-[var(--accent)] shadow-[0_0_24px_var(--glow)]" : ""
+        isOver ? "border-[var(--accent)] bg-[var(--accent-soft)]" : ""
       }`}
     >
       <div className="flex items-center gap-2 px-1.5 py-1.5">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: status.color, boxShadow: `0 0 10px ${status.color}` }} />
+        <span className="h-2.5 w-2.5 rounded-full" style={{ background: status.color }} />
         <span className="text-sm font-bold">{status.name}</span>
         <span className="muted text-xs">{tasks.length}</span>
         <span className="flex-1" />
-        {xp > 0 && <span className="text-[11px] text-amber-300/80">🪙 {xp}</span>}
+        {xp > 0 && <span className="text-[11px] text-amber-500">🪙 {xp}</span>}
       </div>
       <SortableContext items={tasks.map((x) => x.id)} strategy={verticalListSortingStrategy}>
         <div className="flex min-h-12 flex-col gap-2">
@@ -165,10 +165,10 @@ function ListGroup({ status, tasks, onOpen, planetId }: { status: StatusCol; tas
   const { setNodeRef, isOver } = useDroppable({ id: status.id });
   const [open, setOpen] = useState(status.kind !== "DONE");
   return (
-    <div ref={setNodeRef} className={`panel p-2 ${isOver ? "border-[var(--accent)] shadow-[0_0_24px_var(--glow)]" : ""}`}>
+    <div ref={setNodeRef} className={`panel p-2 ${isOver ? "border-[var(--accent)] bg-[var(--accent-soft)]" : ""}`}>
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-1.5 py-1 text-left">
         <span className="muted w-3 text-xs">{open ? "▾" : "▸"}</span>
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: status.color, boxShadow: `0 0 10px ${status.color}` }} />
+        <span className="h-2.5 w-2.5 rounded-full" style={{ background: status.color }} />
         <span className="text-sm font-bold">{status.name}</span>
         <span className="muted text-xs">{tasks.length}</span>
       </button>

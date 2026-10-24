@@ -1,15 +1,16 @@
 "use client";
 
-import type { StatusKind } from "@prisma/client";
+import type { CustomField, StatusKind } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { addComment, deleteComment, editComment, toggleReaction } from "@/app/actions/comments";
-import { deleteTask, moveTask, setAssignees, setTags, setXpShares, updateTask } from "@/app/actions/tasks";
+import { addTime, deleteTask, moveTask, removeAttachment, setAssignees, setTags, setXpShares, toggleTimer, updateTask } from "@/app/actions/tasks";
 import { formatDateTime, formatDay, formatTime, isSameTbilisiDay } from "@/lib/dates";
 import { DIFFICULTIES, PRIORITIES, taskXp } from "@/lib/game";
 import { PRIORITY_ICON, PRIORITY_LABEL } from "@/lib/i18n";
 import type { TaskCard } from "@/lib/taskQuery";
 import { Avatar } from "../Avatar";
+import { Live } from "../Live";
 import { useGame } from "../Game";
 import { playBlip, playWhoosh } from "../sound";
 import { useUi } from "../UiContext";
@@ -31,8 +32,15 @@ export type PanelComment = {
   reactions: { emoji: string; count: number; mine: boolean }[];
 };
 
+export type PanelAttachment = { id: string; name: string; mime: string; size: number; url: string };
+
 export type PanelTask = TaskCard & {
-  description: string | null;
+  description: string;
+  customFields: CustomField[];
+  fields: Record<string, string>;
+  attachments: PanelAttachment[];
+  timerSince: string | null;
+  runningTimers: string[];
   xpOverride: boolean;
   creatorName: string;
   creatorAvatar: string;
@@ -49,15 +57,9 @@ export function TaskPanel({ task }: { task: PanelTask }) {
   const { t, locale, me } = useUi();
   const { closeTask, openTask } = useTaskNav();
   const { celebrate, toast } = useGame();
-  const router = useRouter();
   const [tab, setTab] = useState<"details" | "chat">("details");
   const [, start] = useTransition();
 
-  // Lightweight live updates while the panel is open (comments from teammates).
-  useEffect(() => {
-    const id = setInterval(() => document.visibilityState === "visible" && router.refresh(), 5000);
-    return () => clearInterval(id);
-  }, [router]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && closeTask();
@@ -86,6 +88,7 @@ export function TaskPanel({ task }: { task: PanelTask }) {
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-black/40" onClick={closeTask}>
+      <Live keys={[`task-${task.id}`]} />
       <div className="slide-in flex h-full w-full max-w-6xl flex-col border-l border-[var(--border)] bg-[var(--bg)] shadow-2xl" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3">
@@ -134,7 +137,7 @@ export function TaskPanel({ task }: { task: PanelTask }) {
                 </button>
               )}
               {task.perms.approve && done && task.statusKind === "REVIEW" && (
-                <button className="btn bg-emerald-500 text-white shadow-[0_0_18px_rgba(16,185,129,.5)]" onClick={() => changeStatus(done.id)}>
+                <button className="btn bg-emerald-600 text-white hover:bg-emerald-500" onClick={() => changeStatus(done.id)}>
                   ✅ {t.approve} (+{task.xp} XP)
                 </button>
               )}
@@ -210,6 +213,13 @@ export function TaskPanel({ task }: { task: PanelTask }) {
               <Label>{t.tags}</Label>
               <TagEditor value={task.tags.map((x) => x.name)} disabled={!task.perms.edit} onSave={(names) => run(() => setTags(task.id, names))} />
 
+              <Label>⏱ {t.timeSpent}</Label>
+              <TimeTracker task={task} run={run} />
+
+              {task.customFields.map((f) => (
+                <FieldRow key={f.id} field={f} value={task.fields[f.id] ?? ""} disabled={!task.perms.edit} onSave={(value) => run(() => updateTask(task.id, { field: { id: f.id, value } }))} />
+              ))}
+
               <Label>{t.createdAt}</Label>
               <span className="muted flex items-center gap-2">
                 <Avatar avatar={task.creatorAvatar} size={20} /> {task.creatorName} · {formatDateTime(task.createdAt, locale)}
@@ -218,8 +228,10 @@ export function TaskPanel({ task }: { task: PanelTask }) {
 
             <section>
               <h3 className="mb-2 text-sm font-bold">📝 {t.description}</h3>
-              <Description value={task.description ?? ""} disabled={!task.perms.edit} onSave={(description) => run(() => updateTask(task.id, { description }))} />
+              <Description value={task.description} disabled={!task.perms.edit} onSave={(description) => run(() => updateTask(task.id, { description }))} />
             </section>
+
+            <Attachments task={task} />
 
             {!task.parentId && (
               <section>
@@ -367,7 +379,7 @@ function XpEditor({ task, onSave }: { task: PanelTask; onSave: (xp: number | nul
   if (!task.perms.editXp) return <XpChip xp={task.xp} />;
   return (
     <div className="flex items-center gap-2">
-      <span className="text-amber-300">🪙</span>
+      <span className="text-amber-500">🪙</span>
       <input type="number" min={0} className="input w-24" value={v} onChange={(e) => setV(e.target.value)} onBlur={() => Number(v) !== task.xp && onSave(Number(v))} />
       {task.xpOverride ? (
         <button className="muted text-xs underline" onClick={() => onSave(null)}>
@@ -446,7 +458,7 @@ function Chat({ task, run }: { task: PanelTask; run: (fn: () => Promise<unknown>
     const body = text.trim();
     if (!body) return;
     if (editing) {
-      run(() => editComment(editing, body));
+      run(() => editComment(task.id, editing, body));
       setEditing(null);
     } else {
       run(() => addComment(task.id, body, replyTo?.id));
@@ -474,7 +486,7 @@ function Chat({ task, run }: { task: PanelTask; run: (fn: () => Promise<unknown>
                 </div>
                 <div
                   className={`rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap ${
-                    c.authorId === me.id ? "rounded-tr-sm bg-gradient-to-br from-[var(--accent)] to-[#6366f1] text-white" : "rounded-tl-sm bg-[var(--bg-soft)]"
+                    c.authorId === me.id ? "rounded-tr-sm bg-[var(--accent)] text-white" : "rounded-tl-sm bg-[var(--bg-soft)]"
                   } ${c.deleted ? "italic opacity-50" : ""}`}
                 >
                   {c.parentPreview && <div className="mb-1 border-l-2 border-white/40 pl-2 text-xs opacity-75">↩ {c.parentPreview}</div>}
@@ -484,8 +496,8 @@ function Chat({ task, run }: { task: PanelTask; run: (fn: () => Promise<unknown>
                   {c.reactions.map((r) => (
                     <button
                       key={r.emoji}
-                      onClick={() => run(() => toggleReaction(c.id, r.emoji))}
-                      className={`chip ${r.mine ? "border-[var(--accent)] bg-[var(--glow)]" : "border-[var(--border)]"}`}
+                      onClick={() => run(() => toggleReaction(task.id, c.id, r.emoji))}
+                      className={`chip ${r.mine ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--border)]"}`}
                     >
                       {r.emoji} {r.count}
                     </button>
@@ -493,7 +505,7 @@ function Chat({ task, run }: { task: PanelTask; run: (fn: () => Promise<unknown>
                   {!c.deleted && task.perms.comment && (
                     <span className="hidden gap-0.5 group-hover:flex max-lg:flex">
                       {REACTIONS.map((e) => (
-                        <button key={e} className="text-xs opacity-60 hover:scale-125 hover:opacity-100" onClick={() => run(() => toggleReaction(c.id, e))}>
+                        <button key={e} className="text-xs opacity-60 hover:scale-125 hover:opacity-100" onClick={() => run(() => toggleReaction(task.id, c.id, e))}>
                           {e}
                         </button>
                       ))}
@@ -505,7 +517,7 @@ function Chat({ task, run }: { task: PanelTask; run: (fn: () => Promise<unknown>
                           <button className="muted ml-1 text-[11px]" onClick={() => (setEditing(c.id), setText(c.body))}>
                             ✏️
                           </button>
-                          <button className="muted ml-1 text-[11px]" onClick={() => run(() => deleteComment(c.id))}>
+                          <button className="muted ml-1 text-[11px]" onClick={() => run(() => deleteComment(task.id, c.id))}>
                             🗑️
                           </button>
                         </>
@@ -580,3 +592,157 @@ function highlight(body: string) {
   );
 }
 
+
+function formatDuration(sec: number) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
+function TimeTracker({ task, run }: { task: PanelTask; run: (fn: () => Promise<unknown>) => void }) {
+  const { t } = useUi();
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!task.timerSince) return;
+    const id = setInterval(() => setTick((x) => x + 1), 1000);
+    return () => clearInterval(id);
+  }, [task.timerSince]);
+  const running = task.timerSince ? Math.max(0, Math.round((Date.now() - Date.parse(task.timerSince)) / 1000)) : 0;
+  void tick;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button className={`btn ${task.timerSince ? "bg-rose-600 text-white hover:bg-rose-500" : "btn-ghost"}`} onClick={() => run(() => toggleTimer(task.id))}>
+        {task.timerSince ? `⏹ ${formatDuration(running)}` : `▶ ${t.startTimer}`}
+      </button>
+      <span className="text-sm font-semibold">{formatDuration(task.timeSpentSec)}</span>
+      {task.perms.edit && (
+        <select className="input w-auto py-1 text-xs" value="" onChange={(e) => e.target.value && run(() => addTime(task.id, Number(e.target.value)))}>
+          <option value="">＋ {t.addTime}</option>
+          {[15, 30, 60, 120, 240].map((m) => (
+            <option key={m} value={m}>
+              +{formatDuration(m * 60)}
+            </option>
+          ))}
+        </select>
+      )}
+      {task.runningTimers.length > 0 && <span className="muted text-xs">⏱ {task.runningTimers.join(", ")}</span>}
+    </div>
+  );
+}
+
+function FieldRow({ field, value, disabled, onSave }: { field: CustomField; value: string; disabled: boolean; onSave: (v: string) => void }) {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    setV(value);
+  }, [value]);
+  const commit = (next: string) => next !== value && onSave(next);
+  let input: React.ReactNode;
+  if (field.type === "CHECKBOX") {
+    input = <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" disabled={disabled} checked={v === "true"} onChange={(e) => commit(String(e.target.checked))} />;
+  } else if (field.type === "SELECT") {
+    input = (
+      <select className="input max-w-56" disabled={disabled} value={v} onChange={(e) => commit(e.target.value)}>
+        <option value="">—</option>
+        {field.options.map((o) => (
+          <option key={o}>{o}</option>
+        ))}
+      </select>
+    );
+  } else {
+    const type = field.type === "NUMBER" ? "number" : field.type === "DATE" ? "date" : field.type === "URL" ? "url" : "text";
+    input = (
+      <div className="flex max-w-md items-center gap-2">
+        <input className="input" type={type} disabled={disabled} value={v} onChange={(e) => setV(e.target.value)} onBlur={() => commit(v)} />
+        {field.type === "URL" && v && (
+          <a href={v} target="_blank" rel="noreferrer" className="text-[var(--accent)]">
+            ↗
+          </a>
+        )}
+      </div>
+    );
+  }
+  return (
+    <>
+      <Label>{field.name}</Label>
+      {input}
+    </>
+  );
+}
+
+function Attachments({ task }: { task: PanelTask }) {
+  const { t } = useUi();
+  const { toast } = useGame();
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [over, setOver] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+
+  async function upload(files: FileList | File[]) {
+    const list = [...files];
+    if (!list.length) return;
+    setBusy(true);
+    const form = new FormData();
+    list.forEach((f) => form.append("files", f));
+    const res = await fetch(`/api/tasks/${task.id}/files`, { method: "POST", body: form });
+    setBusy(false);
+    if (!res.ok) return toast(res.status === 413 ? "25MB max" : t.noPermission, "error", "⛔");
+    playBlip();
+    router.refresh();
+  }
+
+  return (
+    <section
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        if (task.perms.edit) upload(e.dataTransfer.files);
+      }}
+    >
+      <h3 className="mb-2 flex items-center gap-2 text-sm font-bold">
+        📎 {t.files} {task.attachments.length > 0 && <span className="muted">({task.attachments.length})</span>}
+      </h3>
+      <div className={`rounded-xl border border-dashed p-3 transition ${over ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--border)]"}`}>
+        {task.attachments.length > 0 && (
+          <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {task.attachments.map((a) => (
+              <div key={a.id} className="group relative overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-soft)]">
+                <a href={a.url} target="_blank" rel="noreferrer" className="block">
+                  {a.mime.startsWith("image/") ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={a.url} alt={a.name} className="h-24 w-full object-cover" />
+                  ) : (
+                    <div className="flex h-24 items-center justify-center text-3xl">📄</div>
+                  )}
+                  <div className="truncate px-2 py-1 text-xs">{a.name}</div>
+                </a>
+                {task.perms.edit && (
+                  <button
+                    className="absolute top-1 right-1 hidden rounded-md bg-black/60 px-1.5 text-xs text-white group-hover:block max-lg:block"
+                    onClick={async () => {
+                      await removeAttachment(task.id, a.id);
+                      router.refresh();
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {task.perms.edit && (
+          <button className="muted w-full text-center text-sm hover:text-[var(--accent)]" disabled={busy} onClick={() => input.current?.click()}>
+            {busy ? "⏳ ..." : `⬆ ${t.dropFiles}`}
+          </button>
+        )}
+        <input ref={input} type="file" multiple hidden onChange={(e) => e.target.files && upload(e.target.files)} />
+      </div>
+    </section>
+  );
+}

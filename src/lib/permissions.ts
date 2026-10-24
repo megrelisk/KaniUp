@@ -1,53 +1,42 @@
-import type { Permission, Role, ScopeType } from "@prisma/client";
-import { DEFAULT_PERMISSIONS } from "./roles";
+import type { Permission, ScopeType } from "./types";
 
 export type ScopeNode = { type: ScopeType; id: string };
-export type Grant = { role: Role; scopeType: ScopeType; scopeId: string };
-export type Override = {
-  role: Role;
-  permission: Permission;
-  allowed: boolean;
-  scopeType: ScopeType | null;
-  scopeId: string | null;
-};
+export type RoleDef = { id: string; permissions: Permission[]; scopedOnly: boolean };
+export type Grant = { roleId: string; scopeType: ScopeType; scopeId: string };
+export type Override = { roleId: string; permission: Permission; allowed: boolean; scopeType: ScopeType; scopeId: string };
+export type Actor = { roleId: string; isOwner: boolean; grants: Grant[] };
 
-const sameNode = (n: ScopeNode, type: ScopeType | null, id: string | null) => n.type === type && n.id === id;
+export const OWNER = "OWNER" as const;
 
 /**
  * The role a user has at a node. `path` is ordered from most specific
- * (planet / inner folder) to least specific (galaxy). The closest grant wins;
- * otherwise the user's global role applies — except guests, who only see
- * places they were explicitly granted.
+ * (inner folder / planet) to least specific (galaxy). The closest grant wins;
+ * otherwise the user's global role applies — unless that role is scoped-only
+ * (guests), who see only places they were explicitly granted.
  */
-export function effectiveRole(globalRole: Role, grants: Grant[], path: ScopeNode[]): Role | null {
-  if (globalRole === "OWNER") return "OWNER";
+export function effectiveRole(actor: Actor, roles: RoleDef[], path: ScopeNode[]): RoleDef | typeof OWNER | null {
+  if (actor.isOwner) return OWNER;
   for (const node of path) {
-    const grant = grants.find((g) => sameNode(node, g.scopeType, g.scopeId));
-    if (grant) return grant.role;
+    const grant = actor.grants.find((g) => g.scopeType === node.type && g.scopeId === node.id);
+    if (grant) return roles.find((r) => r.id === grant.roleId) ?? null;
   }
-  return globalRole === "GUEST" ? null : globalRole;
+  const global = roles.find((r) => r.id === actor.roleId);
+  return !global || global.scopedOnly ? null : global;
 }
 
-/** Whether a role has a permission at a node: closest scoped override → global override → default. */
-export function roleAllows(role: Role, permission: Permission, overrides: Override[], path: ScopeNode[]): boolean {
-  if (role === "OWNER") return true;
-  const relevant = overrides.filter((o) => o.role === role && o.permission === permission);
+/** Whether a role has a permission at a node: the closest scoped override wins, else the role's own setting. */
+export function roleAllows(role: RoleDef, permission: Permission, overrides: Override[], path: ScopeNode[]): boolean {
+  const relevant = overrides.filter((o) => o.roleId === role.id && o.permission === permission);
   for (const node of path) {
-    const o = relevant.find((r) => sameNode(node, r.scopeType, r.scopeId));
+    const o = relevant.find((r) => r.scopeType === node.type && r.scopeId === node.id);
     if (o) return o.allowed;
   }
-  const global = relevant.find((r) => r.scopeType === null);
-  if (global) return global.allowed;
-  return DEFAULT_PERMISSIONS[role].has(permission);
+  return role.permissions.includes(permission);
 }
 
-export function can(
-  user: { role: Role; grants: Grant[] },
-  permission: Permission,
-  overrides: Override[],
-  path: ScopeNode[],
-): boolean {
-  const role = effectiveRole(user.role, user.grants, path);
+export function can(actor: Actor, permission: Permission, roles: RoleDef[], overrides: Override[], path: ScopeNode[]): boolean {
+  const role = effectiveRole(actor, roles, path);
+  if (role === OWNER) return true;
   if (!role) return false;
   return roleAllows(role, permission, overrides, path);
 }

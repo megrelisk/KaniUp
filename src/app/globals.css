@@ -5,33 +5,32 @@
 @theme {
   --font-sans: "Noto Sans Georgian", "Inter", system-ui, sans-serif;
   --font-display: "Orbitron", "Noto Sans Georgian", system-ui, sans-serif;
-  --color-neon-violet: #8b5cf6;
-  --color-neon-cyan: #22d3ee;
-  --color-neon-pink: #f472b6;
 }
 
 :root {
-  --bg: #f4f6ff;
+  --bg: #f5f6fa;
   --bg-elev: #ffffff;
-  --bg-soft: #eef0fb;
-  --border: #dde1f3;
-  --text: #121633;
-  --muted: #5b6390;
-  --accent: #6d4aff;
-  --accent-2: #0891b2;
-  --glow: rgba(109, 74, 255, 0.18);
+  --bg-soft: #eef0f6;
+  --border: #e1e4ee;
+  --text: #171b2c;
+  --muted: #646b85;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: rgba(79, 70, 229, 0.1);
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
 }
 
 .dark {
-  --bg: #060818;
-  --bg-elev: #0d1130;
-  --bg-soft: #131845;
-  --border: #232a63;
-  --text: #e6e9ff;
-  --muted: #8d95c7;
-  --accent: #8b5cf6;
-  --accent-2: #22d3ee;
-  --glow: rgba(139, 92, 246, 0.35);
+  --bg: #0b0e1a;
+  --bg-elev: #131829;
+  --bg-soft: #1a2035;
+  --border: #262d47;
+  --text: #e8eaf4;
+  --muted: #8b92ad;
+  --accent: #6c6cf2;
+  --accent-hover: #7d7ef5;
+  --accent-soft: rgba(108, 108, 242, 0.14);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 html,
@@ -45,134 +44,102 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Starfield behind everything in dark mode. */
-.dark body {
-  background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(139, 92, 246, 0.18), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgba(34, 211, 238, 0.12), transparent 60%),
-    var(--bg);
-}
+/* A quiet starfield behind everything in dark mode — small white dots, no glow. */
 .dark body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.55;
+  opacity: 0.35;
   background-image:
     radial-gradient(1px 1px at 20px 30px, #fff, transparent),
-    radial-gradient(1px 1px at 120px 80px, #c4b5fd, transparent),
-    radial-gradient(1.5px 1.5px at 200px 160px, #fff, transparent),
-    radial-gradient(1px 1px at 320px 40px, #67e8f9, transparent),
-    radial-gradient(1px 1px at 380px 220px, #fff, transparent);
+    radial-gradient(1px 1px at 140px 90px, #fff, transparent),
+    radial-gradient(1px 1px at 260px 170px, #fff, transparent),
+    radial-gradient(1px 1px at 330px 40px, #fff, transparent),
+    radial-gradient(1px 1px at 390px 230px, #fff, transparent);
   background-size: 420px 260px;
-  animation: drift 120s linear infinite;
-}
-@keyframes drift {
-  to {
-    background-position: 420px 260px;
-  }
 }
 
 @layer components {
-.panel {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-}
-.dark .panel {
-  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
-  backdrop-filter: blur(8px);
-}
+  .panel {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+  }
 
-.neon-text {
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
+  .brand {
+    color: var(--text);
+    letter-spacing: 0.06em;
+  }
 
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  border-radius: 10px;
-  padding: 0.45rem 0.9rem;
-  font-weight: 600;
-  font-size: 0.875rem;
-  transition: transform 0.08s, box-shadow 0.2s, background 0.2s;
-}
-.btn:active {
-  transform: scale(0.97);
-}
-.btn-primary {
-  color: #fff;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  box-shadow: 0 0 18px var(--glow);
-}
-.btn-primary:hover {
-  box-shadow: 0 0 28px var(--glow);
-}
-.btn-ghost {
-  color: var(--text);
-  background: transparent;
-  border: 1px solid var(--border);
-}
-.btn-ghost:hover {
-  background: var(--bg-soft);
-}
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 10px;
+    padding: 0.45rem 0.9rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    transition: transform 0.08s, background 0.15s, border-color 0.15s;
+  }
+  .btn:active {
+    transform: scale(0.97);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+  }
+  .btn-primary {
+    color: #fff;
+    background: var(--accent);
+  }
+  .btn-primary:hover {
+    background: var(--accent-hover);
+  }
+  .btn-ghost {
+    color: var(--text);
+    background: transparent;
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover {
+    background: var(--bg-soft);
+  }
 
-.input {
-  width: 100%;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--bg-soft);
-  padding: 0.45rem 0.7rem;
-  font-size: 0.875rem;
-  color: var(--text);
-  outline: none;
-}
-.input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--glow);
-}
+  .input {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-soft);
+    padding: 0.45rem 0.7rem;
+    font-size: 0.875rem;
+    color: var(--text);
+    outline: none;
+  }
+  .input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
 
-.muted {
-  color: var(--muted);
-}
+  .muted {
+    color: var(--muted);
+  }
 
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  border: 1px solid;
-  border-radius: 999px;
-  padding: 0.05rem 0.5rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-}
-
-.legendary-glow {
-  animation: legendary 2.4s ease-in-out infinite;
-}
-@keyframes legendary {
-  50% {
-    box-shadow: 0 0 12px rgba(251, 146, 60, 0.55);
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border: 1px solid;
+    border-radius: 999px;
+    padding: 0.05rem 0.5rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
   }
 }
 
 .xp-bar {
-  background: linear-gradient(90deg, #8b5cf6, #22d3ee, #f472b6);
-  background-size: 200% 100%;
-  animation: shimmer 4s linear infinite;
-}
-@keyframes shimmer {
-  to {
-    background-position: -200% 0;
-  }
+  background: var(--accent);
 }
 
 @keyframes pop-in {

@@ -1,4 +1,4 @@
-import type { Difficulty, Priority } from "@prisma/client";
+import type { Difficulty, Priority } from "./types";
 
 export const DIFFICULTIES: Difficulty[] = ["EASY", "NORMAL", "HARD", "EPIC", "LEGENDARY"];
 export const PRIORITIES: Priority[] = ["LOW", "NORMAL", "HIGH", "URGENT"];

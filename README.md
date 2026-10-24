@@ -4,15 +4,17 @@
 
 ## ლოკალურად გაშვება
 
+საჭიროა Node.js 20+ და Java 11+ (Firebase emulator-ებისთვის).
+
 ```bash
-cp .env.example .env        # შეავსე DATABASE_URL, AUTH_SECRET, OWNER_EMAILS
+cp .env.example .env      # შეცვალე OWNER_EMAILS შენს მეილზე
 npm install
-npm run db:push             # ბაზის სქემა
-npm run db:seed             # (არასავალდებულო) სატესტო მონაცემები
-npm run dev                 # http://localhost:3000
+npm run emulators         # ტერმინალი 1: Firebase Auth / Firestore / Storage ლოკალურად (UI: http://127.0.0.1:4000)
+npm run db:seed           # ტერმინალი 2: (არასავალდებულო) სატესტო მონაცემები
+npm run dev               # http://localhost:3000
 ```
 
-SMTP არ არის მითითებული → შესვლის ლინკი სერვერის კონსოლში იბეჭდება.
+**შესვლა ლოკალურად:** შეიყვანე მეილი → emulator-ის ტერმინალში (ან http://127.0.0.1:4000/auth) გამოჩნდება ლინკი „To sign in as …, follow this link“ — გახსენი ბრაუზერში.
 
 ```bash
 npm test          # unit ტესტები

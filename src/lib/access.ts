@@ -1,34 +1,14 @@
-import type { Permission } from "@prisma/client";
-import { cache } from "react";
-import { db } from "./db";
-import { can, effectiveRole, type ScopeNode } from "./permissions";
+import "server-only";
+import { loadOverrides, loadRoles, loadTree, type Tree } from "./data";
+import { can, effectiveRole, OWNER, type ScopeNode } from "./permissions";
 import type { CurrentUser } from "./session";
+import type { Permission, ScopeType } from "./types";
 
 export class ForbiddenError extends Error {
   constructor() {
     super("forbidden");
   }
 }
-
-export const loadOverrides = cache(() => db.rolePermission.findMany());
-
-/** The whole galaxy/folder/planet structure, loaded once per request (it is small). */
-export const loadTree = cache(async () => {
-  const [galaxies, folders, planets] = await Promise.all([
-    db.galaxy.findMany({ where: { deletedAt: null }, orderBy: [{ position: "asc" }, { createdAt: "asc" }] }),
-    db.folder.findMany({ where: { deletedAt: null }, orderBy: [{ position: "asc" }, { createdAt: "asc" }] }),
-    db.planet.findMany({ where: { deletedAt: null }, orderBy: [{ position: "asc" }, { createdAt: "asc" }] }),
-  ]);
-  return {
-    galaxies,
-    folders,
-    planets,
-    folderById: new Map(folders.map((f) => [f.id, f])),
-    planetById: new Map(planets.map((p) => [p.id, p])),
-  };
-});
-
-type Tree = Awaited<ReturnType<typeof loadTree>>;
 
 function folderChain(tree: Tree, folderId: string | null): ScopeNode[] {
   const nodes: ScopeNode[] = [];
@@ -52,42 +32,43 @@ export function folderPathIn(tree: Tree, folderId: string): ScopeNode[] {
   return [...chain, { type: "GALAXY", id: folder.galaxyId }];
 }
 
-export async function planetPath(planetId: string) {
-  return planetPathIn(await loadTree(), planetId);
+export async function scopePath(type: ScopeType | "ROOT", id?: string | null): Promise<ScopeNode[]> {
+  if (type === "ROOT" || !id) return [];
+  const tree = await loadTree();
+  if (type === "GALAXY") return [{ type, id }];
+  if (type === "FOLDER") return folderPathIn(tree, id);
+  return planetPathIn(tree, id);
 }
 
-export async function folderPath(folderId: string) {
-  return folderPathIn(await loadTree(), folderId);
-}
+export const planetPath = (id: string) => scopePath("PLANET", id);
+export const folderPath = (id: string) => scopePath("FOLDER", id);
+export const galaxyPath = (id: string) => scopePath("GALAXY", id);
 
-export async function galaxyPath(galaxyId: string): Promise<ScopeNode[]> {
-  return [{ type: "GALAXY", id: galaxyId }];
-}
-
-export async function taskPath(task: { planetId: string; folderId: string | null }) {
-  // A folder inside a planet is more specific than the planet itself.
-  return task.folderId ? folderPath(task.folderId) : planetPath(task.planetId);
-}
+/** A folder inside a planet is more specific than the planet itself. */
+export const taskPath = (task: { planetId: string; folderId: string | null }) => (task.folderId ? folderPath(task.folderId) : planetPath(task.planetId));
 
 export async function userCan(user: CurrentUser, permission: Permission, path: ScopeNode[]) {
-  return can(user, permission, await loadOverrides(), path);
+  const [roles, overrides] = await Promise.all([loadRoles(), loadOverrides()]);
+  return can(user, permission, roles, overrides, path);
 }
 
 export async function assertCan(user: CurrentUser, permission: Permission, path: ScopeNode[]) {
   if (!(await userCan(user, permission, path))) throw new ForbiddenError();
 }
 
-export function isAdmin(user: { role: string }) {
-  return user.role === "OWNER" || user.role === "ADMIN";
+/** Admin areas (crew, roles) are for owners and roles that may manage roles. */
+export async function isAdmin(user: CurrentUser) {
+  return user.isOwner || (await userCan(user, "MANAGE_ROLES", []));
 }
 
 /** Planet ids the user may view — scopes lists, search and the home dashboard. */
 export async function visiblePlanetIds(user: CurrentUser): Promise<string[]> {
-  const [tree, overrides] = await Promise.all([loadTree(), loadOverrides()]);
+  const [tree, roles, overrides] = await Promise.all([loadTree(), loadRoles(), loadOverrides()]);
   return tree.planets
     .filter((p) => {
       const path = planetPathIn(tree, p.id);
-      return effectiveRole(user.role, user.grants, path) !== null && can(user, "VIEW", overrides, path);
+      const role = effectiveRole(user, roles, path);
+      return role === OWNER || (role !== null && can(user, "VIEW", roles, overrides, path));
     })
     .map((p) => p.id);
 }

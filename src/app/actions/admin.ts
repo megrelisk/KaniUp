@@ -3,47 +3,52 @@
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import type { Permission, Role, ScopeType } from "@prisma/client";
-import { db } from "@/lib/db";
-import { assertCan, folderPath, galaxyPath, planetPath } from "@/lib/access";
+import { all, col, loadRoles, now, one } from "@/lib/data";
+import { adminAuth } from "@/lib/firebase/admin";
+import { assertCan, scopePath } from "@/lib/access";
 import { requireUser } from "@/lib/session";
 import { INVITE_TTL_MS } from "@/lib/invitations";
 import { mailLayout, sendMail } from "@/lib/mail";
-import { ROLE_META } from "@/lib/roles";
+import { PERMISSIONS } from "@/lib/roles";
+import type { GrantDoc, InvitationDoc, OverrideDoc, Permission, RoleDoc, ScopeType, UserDoc } from "@/lib/types";
 
-const role = z.enum(["ADMIN", "MANAGER", "MEMBER", "GUEST"]);
 const scopeType = z.enum(["GALAXY", "FOLDER", "PLANET"]);
 
-async function scopePath(type: ScopeType, id: string) {
-  if (type === "GALAXY") return galaxyPath(id);
-  if (type === "FOLDER") return folderPath(id);
-  return planetPath(id);
+async function roleExists(roleId: string) {
+  const role = (await loadRoles()).find((r) => r.id === roleId);
+  if (!role) throw new Error("unknown role");
+  return role;
 }
 
-export async function inviteMember(input: { email: string; role: Role; scopeType?: ScopeType | null; scopeId?: string | null }) {
+export async function inviteMember(input: { email: string; roleId: string; scopeType?: ScopeType | null; scopeId?: string | null }) {
   const user = await requireUser();
   const email = z.string().trim().toLowerCase().email().parse(input.email);
-  const r = role.parse(input.role);
+  const role = await roleExists(input.roleId);
   const st = input.scopeType ? scopeType.parse(input.scopeType) : null;
   const sid = st ? z.string().parse(input.scopeId) : null;
-  await assertCan(user, "INVITE", st && sid ? await scopePath(st, sid) : []);
-  // Only owners can hand out admin.
-  if (r === "ADMIN" && user.role !== "OWNER") throw new Error("forbidden");
+  await assertCan(user, "INVITE", await scopePath(st ?? "ROOT", sid));
+  // Handing out a role that manages roles is reserved to people who manage roles themselves.
+  if (role.permissions.includes("MANAGE_ROLES")) await assertCan(user, "MANAGE_ROLES", []);
 
   const token = randomBytes(24).toString("base64url");
-  await db.invitation.create({
-    data: { email, role: r, scopeType: st, scopeId: sid, token, inviterId: user.id, expiresAt: new Date(Date.now() + INVITE_TTL_MS) },
-  });
-  const url = `${process.env.AUTH_URL ?? "http://localhost:3000"}/invite/${token}`;
-  const meta = ROLE_META[r];
+  await col.invitations().doc(token).set({
+    email,
+    roleId: role.id,
+    scopeType: st,
+    scopeId: sid,
+    inviterId: user.id,
+    expiresAt: new Date(Date.now() + INVITE_TTL_MS).toISOString(),
+    acceptedAt: null,
+    createdAt: now(),
+  } satisfies Omit<InvitationDoc, "id">);
+  const url = `${process.env.APP_URL ?? "http://localhost:3000"}/invite/${token}`;
   await sendMail(
     email,
     "🚀 მოწვევა KaniUp-ში / You're invited to KaniUp",
-    mailLayout(
-      "შენ მიგიწვიეს ეკიპაჟში!",
-      `${user.name ?? user.email} გიწვევს KaniUp-ში როლით <b>${meta.icon} ${meta.ka}</b>. ლინკი მოქმედებს 3 დღე.`,
-      { url, label: "შეუერთდი / Join the crew" },
-    ),
+    mailLayout("შენ მიგიწვიეს ეკიპაჟში!", `${user.name} გიწვევს KaniUp-ში როლით <b>${role.icon} ${role.name}</b>. ლინკი მოქმედებს 3 დღე.`, {
+      url,
+      label: "შეუერთდი / Join the crew",
+    }),
     `You're invited to KaniUp: ${url}`,
   );
   revalidatePath("/admin");
@@ -52,63 +57,108 @@ export async function inviteMember(input: { email: string; role: Role; scopeType
 export async function revokeInvitation(id: string) {
   const user = await requireUser();
   await assertCan(user, "INVITE", []);
-  await db.invitation.delete({ where: { id } });
+  await col.invitations().doc(id).delete();
   revalidatePath("/admin");
 }
 
-export async function setUserRole(userId: string, newRole: Role) {
+async function manageableTarget(userId: string) {
   const user = await requireUser();
   await assertCan(user, "MANAGE_ROLES", []);
-  const r = role.parse(newRole);
-  const target = await db.user.findUniqueOrThrow({ where: { id: userId } });
-  if (target.role === "OWNER" || (r === "ADMIN" && user.role !== "OWNER")) throw new Error("forbidden");
-  await db.user.update({ where: { id: userId }, data: { role: r } });
+  const target = await one<UserDoc>(col.users().doc(userId));
+  if (!target || target.isOwner) throw new Error("forbidden");
+  return target;
+}
+
+export async function setUserRole(userId: string, roleId: string) {
+  await manageableTarget(userId);
+  await roleExists(roleId);
+  await col.users().doc(userId).update({ roleId });
   revalidatePath("/admin");
 }
 
 export async function setUserPhone(userId: string, phone: string) {
   const user = await requireUser();
   await assertCan(user, "MANAGE_ROLES", []);
-  await db.user.update({ where: { id: userId }, data: { phone: phone.trim().slice(0, 30) || null } });
+  await col.users().doc(userId).update({ phone: phone.trim().slice(0, 30) || null });
   revalidatePath("/admin");
 }
 
 export async function setUserActive(userId: string, active: boolean) {
-  const user = await requireUser();
-  await assertCan(user, "MANAGE_ROLES", []);
-  const target = await db.user.findUniqueOrThrow({ where: { id: userId } });
-  if (target.role === "OWNER") throw new Error("forbidden");
-  await db.user.update({ where: { id: userId }, data: { deactivatedAt: active ? null : new Date() } });
-  if (!active) await db.session.deleteMany({ where: { userId } });
+  await manageableTarget(userId);
+  await col.users().doc(userId).update({ deactivatedAt: active ? null : now() });
+  if (!active) await adminAuth().revokeRefreshTokens(userId).catch(() => {});
   revalidatePath("/admin");
 }
 
-/** Gives a user a role inside a galaxy / folder / planet (or removes it with role=null). */
-export async function setGrant(userId: string, st: ScopeType, scopeId: string, newRole: Role | null) {
+/** Gives a user a role inside a galaxy / folder / planet (roleId=null removes it). */
+export async function setGrant(userId: string, st: ScopeType, scopeId: string, roleId: string | null) {
   const user = await requireUser();
   await assertCan(user, "MANAGE_ROLES", await scopePath(scopeType.parse(st), scopeId));
-  const key = { userId_scopeType_scopeId: { userId, scopeType: st, scopeId } };
-  if (newRole === null) await db.roleGrant.deleteMany({ where: { userId, scopeType: st, scopeId } });
-  else await db.roleGrant.upsert({ where: key, create: { userId, scopeType: st, scopeId, role: role.parse(newRole) }, update: { role: role.parse(newRole) } });
-  revalidatePath("/admin");
+  const existing = await all<GrantDoc>(col.grants().where("userId", "==", userId));
+  for (const g of existing.filter((g) => g.scopeType === st && g.scopeId === scopeId)) await col.grants().doc(g.id).delete();
+  if (roleId) {
+    await roleExists(roleId);
+    await col.grants().add({ userId, roleId, scopeType: st, scopeId } satisfies Omit<GrantDoc, "id">);
+  }
+  revalidatePath("/admin", "layout");
+}
+
+// ─── Roles ───────────────────────────────────────────────────────────────
+
+const roleSchema = z.object({
+  name: z.string().trim().min(1).max(40),
+  nameEn: z.string().trim().max(40).default(""),
+  icon: z.string().trim().min(1).max(8),
+  scopedOnly: z.boolean().default(false),
+});
+
+export async function createRole(input: z.input<typeof roleSchema>) {
+  const user = await requireUser();
+  await assertCan(user, "MANAGE_ROLES", []);
+  const data = roleSchema.parse(input);
+  const roles = await loadRoles();
+  const ref = await col.roles().add({ ...data, nameEn: data.nameEn || data.name, permissions: ["VIEW", "COMMENT"], position: roles.length } satisfies Omit<RoleDoc, "id">);
+  revalidatePath("/admin", "layout");
+  return ref.id;
+}
+
+export async function updateRole(roleId: string, input: Partial<z.input<typeof roleSchema>>) {
+  const user = await requireUser();
+  await assertCan(user, "MANAGE_ROLES", []);
+  await roleExists(roleId);
+  await col.roles().doc(roleId).update(roleSchema.partial().parse(input));
+  revalidatePath("/admin", "layout");
+}
+
+export async function deleteRole(roleId: string) {
+  const user = await requireUser();
+  await assertCan(user, "MANAGE_ROLES", []);
+  const inUse =
+    (await col.users().where("roleId", "==", roleId).limit(1).get()).size + (await col.grants().where("roleId", "==", roleId).limit(1).get()).size;
+  if (inUse) throw new Error("role_in_use");
+  await col.roles().doc(roleId).delete();
+  for (const o of await all<OverrideDoc>(col.overrides().where("roleId", "==", roleId))) await col.overrides().doc(o.id).delete();
+  revalidatePath("/admin", "layout");
 }
 
 /**
- * Toggles one cell of the permission matrix. A null scope edits the global matrix;
- * a scope edits it only for that galaxy / folder / planet. allowed=null removes the override.
+ * Toggles one permission. Without a scope it edits the role itself; with a scope it
+ * sets (or with allowed=null clears) an override only inside that galaxy / folder / planet.
  */
-export async function setRolePermission(
-  r: Role,
-  permission: Permission,
-  allowed: boolean | null,
-  scope?: { type: ScopeType; id: string },
-) {
+export async function setRolePermission(roleId: string, permission: Permission, allowed: boolean | null, scope?: { type: ScopeType; id: string }) {
   const user = await requireUser();
   await assertCan(user, "MANAGE_ROLES", scope ? await scopePath(scope.type, scope.id) : []);
-  if (r === "OWNER") throw new Error("owner permissions are fixed");
-  const where = { role: r, permission, scopeType: scope?.type ?? null, scopeId: scope?.id ?? null };
-  // Prisma can't upsert on a unique with nullable columns, so delete + create.
-  await db.rolePermission.deleteMany({ where });
-  if (allowed !== null) await db.rolePermission.create({ data: { ...where, allowed } });
-  revalidatePath("/admin");
+  const role = await roleExists(roleId);
+  if (!PERMISSIONS.includes(permission)) throw new Error("unknown permission");
+  if (!scope) {
+    const permissions = allowed ? [...new Set([...role.permissions, permission])] : role.permissions.filter((p) => p !== permission);
+    await col.roles().doc(roleId).update({ permissions });
+  } else {
+    const existing = await all<OverrideDoc>(col.overrides().where("roleId", "==", roleId));
+    for (const o of existing.filter((o) => o.permission === permission && o.scopeType === scope.type && o.scopeId === scope.id)) {
+      await col.overrides().doc(o.id).delete();
+    }
+    if (allowed !== null) await col.overrides().add({ roleId, permission, allowed, scopeType: scope.type, scopeId: scope.id } satisfies Omit<OverrideDoc, "id">);
+  }
+  revalidatePath("/admin", "layout");
 }

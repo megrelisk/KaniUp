@@ -9,8 +9,8 @@ export function TaskCardView({ task, onOpen, showPlanet }: { task: TaskCard; onO
   return (
     <div
       onClick={onOpen}
-      className={`panel group cursor-pointer space-y-2 p-3 transition hover:-translate-y-0.5 hover:border-[var(--accent)] hover:shadow-[0_0_18px_var(--glow)] ${
-        task.difficulty === "LEGENDARY" ? "legendary-glow border-orange-300/50" : ""
+      className={`panel group cursor-pointer space-y-2 p-3 transition hover:-translate-y-0.5 hover:border-[var(--accent)] ${
+        task.difficulty === "LEGENDARY" ? "border-orange-400/50" : ""
       } ${done ? "opacity-70" : ""}`}
     >
       {showPlanet && (
