@@ -21,7 +21,7 @@ async function main() {
   const owner = (process.env.OWNER_EMAILS ?? "owner@kani.ge").split(",")[0].trim();
   const people = [
     { email: owner, name: "Admin", roleId: "admin", isOwner: true, avatar: "polar-bear", xp: 1250 },
-    { email: "oto@kani.ge", name: "ოთო", roleId: "astronaut", isOwner: false, avatar: "tiger", xp: 4700 },
+    { email: "oto@kani.ge", name: "ოთო", roleId: "astronaut", isOwner: false, avatar: "tiger", xp: 4700, phone: "555 12 34 56" },
     { email: "lado@kani.ge", name: "ლადო", roleId: "astronaut", isOwner: false, avatar: "penguin", xp: 2100 },
     { email: "nika@kani.ge", name: "ნიკა", roleId: "navigator", isOwner: false, avatar: "race-car", xp: 600 },
   ];
@@ -30,12 +30,15 @@ async function main() {
     const u = await auth.createUser({ email: p.email, displayName: p.name, emailVerified: true }).catch(() => auth.getUserByEmail(p.email));
     ids.push(u.uid);
     await db.collection("users").doc(u.uid).set({
-      ...p,
       streak: 0,
       bestStreak: 0,
       lastStreakDay: null,
+      visitStreak: 0,
+      bestVisitStreak: 0,
+      lastVisitDay: null,
       achievements: {},
       phone: null,
+      ...p,
       deactivatedAt: null,
       createdAt: now(),
     } satisfies Omit<UserDoc, "id">);

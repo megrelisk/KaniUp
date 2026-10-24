@@ -44,8 +44,13 @@ export type UserDoc = {
   streak: number;
   bestStreak: number;
   lastStreakDay: string | null;
+  /** Second streak: consecutive days the user opened KaniUp at all. */
+  visitStreak: number;
+  bestVisitStreak: number;
+  lastVisitDay: string | null;
   achievements: Record<string, string>;
   phone: string | null;
+  pushTokens?: string[];
   deactivatedAt: string | null;
   createdAt: string;
 };
@@ -150,3 +155,21 @@ export type InvitationDoc = {
 export type XpEventDoc = { id: string; userId: string; taskId: string | null; amount: number; difficulty: Difficulty | null; reason: string; createdAt: string };
 
 export type ActivityDoc = { id: string; taskId: string; actorId: string | null; action: string; data: Record<string, unknown>; createdAt: string };
+
+export type NotifyEvent = "assigned" | "mention" | "comment" | "review" | "done" | "level_up" | "due_today" | "overdue";
+export type NotifyChannel = "inApp" | "email" | "push" | "sms";
+
+/** Which channels each event uses. Only admins change this (settings/notifications). */
+export type NotifySettings = Record<NotifyEvent, NotifyChannel[]>;
+
+export type NotificationDoc = {
+  id: string;
+  userId: string;
+  event: NotifyEvent;
+  title: string;
+  body: string;
+  url: string;
+  taskId: string | null;
+  readAt: string | null;
+  createdAt: string;
+};

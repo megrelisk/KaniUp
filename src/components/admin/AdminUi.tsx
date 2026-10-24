@@ -14,6 +14,7 @@ import {
   updateRole,
 } from "@/app/actions/admin";
 import { PERMISSION_LABEL } from "@/lib/i18n";
+import { OWNER_META } from "@/lib/roles";
 import type { Permission, ScopeType } from "@/lib/types";
 import { Avatar } from "../Avatar";
 import { useGame } from "../Game";
@@ -143,7 +144,7 @@ export function MemberRow({ m, scopes }: { m: MemberInfo; scopes: ScopeOption[] 
           </div>
         </td>
         <td className="p-3">
-          {m.isOwner ? <span>🌟 {locale === "ka" ? "ვარსკვლავთშემოქმედი" : "Starforger"}</span> : <RoleSelect value={m.roleId} onChange={(id) => run(() => setUserRole(m.id, id))} />}
+          {m.isOwner ? <span>{OWNER_META.icon} {OWNER_META[locale]}</span> : <RoleSelect value={m.roleId} onChange={(id) => run(() => setUserRole(m.id, id))} />}
         </td>
         <td className="p-3 max-md:hidden">
           <input className="input" placeholder="+995 5XX XX XX XX" value={phone} onChange={(e) => setPhone(e.target.value)} onBlur={() => phone !== m.phone && run(() => setUserPhone(m.id, phone))} />

@@ -4,8 +4,11 @@ import { Shell } from "@/components/Shell";
 import type { FolderNode, GalaxyNode, PlanetNode } from "@/components/Sidebar";
 import { UiProvider } from "@/components/UiContext";
 import { isAdmin, userCan, visiblePlanetIds } from "@/lib/access";
-import { loadRoles, loadTree, loadUsers, tasksOfPlanets } from "@/lib/data";
-import { activeStreak, levelProgress, tbilisiDay, titleForLevel } from "@/lib/game";
+import { all, col, loadRoles, loadTree, loadUsers, tasksOfPlanets } from "@/lib/data";
+import type { NotificationDoc } from "@/lib/types";
+import { Live } from "@/components/Live";
+import { activeStreak, levelProgress, nextStreak, tbilisiDay, titleForLevel } from "@/lib/game";
+import { recordVisit } from "@/lib/gamify";
 import { getDict, getLocale, requireUser } from "@/lib/session";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -19,7 +22,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     loadRoles(),
     cookies().then((c) => (c.get("theme")?.value === "light" ? "light" : "dark")),
   ]);
-  const [canManageStructure, admin, tasks] = await Promise.all([userCan(user, "MANAGE_STRUCTURE", []), isAdmin(user), tasksOfPlanets(visible)]);
+  const [canManageStructure, admin, tasks, unlocked] = await Promise.all([
+    userCan(user, "MANAGE_STRUCTURE", []),
+    isAdmin(user),
+    tasksOfPlanets(visible),
+    recordVisit(user),
+  ]);
+  const notifications = await all<NotificationDoc>(col.notifications(user.id).orderBy("createdAt", "desc").limit(30));
+  const today = tbilisiDay(new Date());
+  // recordVisit already ran for today, so today's visit counts even before the user doc is re-read.
+  const visitStreak = user.lastVisitDay === today ? (user.visitStreak ?? 0) : nextStreak(user.visitStreak ?? 0, user.lastVisitDay ?? null, today);
 
   const openBy = new Map<string, number>();
   for (const task of tasks) if (!task.parentId && !task.completedAt) openBy.set(task.planetId, (openBy.get(task.planetId) ?? 0) + 1);
@@ -57,10 +69,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         canManageStructure,
       }}
     >
-      <GameProvider>
+      <GameProvider unlocked={unlocked}>
         <Shell
           galaxies={galaxies}
           theme={theme}
+          notifications={notifications.map((n) => ({ id: n.id, event: n.event, title: n.title, body: n.body, url: n.url, read: !!n.readAt, createdAt: n.createdAt }))}
           me={{
             name: user.name,
             avatar: user.avatar,
@@ -69,11 +82,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             current: progress.current,
             needed: progress.needed,
             title: titleForLevel(progress.level)[locale],
-            streak: activeStreak(user.streak, user.lastStreakDay, tbilisiDay(new Date())),
+            streak: activeStreak(user.streak, user.lastStreakDay, today),
+            visitStreak,
             isAdmin: admin,
           }}
         >
           {children}
+          <Live keys={[`notif-${user.id}`]} />
         </Shell>
       </GameProvider>
     </UiProvider>

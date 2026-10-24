@@ -1,6 +1,6 @@
 import "server-only";
 import { col, all, now } from "./data";
-import { DEFAULT_ROLE_ID } from "./roles";
+import { DEFAULT_ROLE_ID, GUEST_ROLE_ID } from "./roles";
 import type { InvitationDoc, UserDoc } from "./types";
 
 export const INVITE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
@@ -39,7 +39,7 @@ export async function ensureMember(uid: string, email: string, displayName: stri
     if (invite.scopeType && invite.scopeId) {
       // A scoped invite: the role applies inside that place only.
       await col.grants().add({ userId: uid, roleId: invite.roleId, scopeType: invite.scopeType, scopeId: invite.scopeId });
-      roleId = "alien";
+      roleId = GUEST_ROLE_ID;
     } else {
       roleId = invite.roleId;
     }
@@ -55,6 +55,9 @@ export async function ensureMember(uid: string, email: string, displayName: stri
     streak: 0,
     bestStreak: 0,
     lastStreakDay: null,
+    visitStreak: 0,
+    bestVisitStreak: 0,
+    lastVisitDay: null,
     achievements: {},
     phone: null,
     deactivatedAt: null,

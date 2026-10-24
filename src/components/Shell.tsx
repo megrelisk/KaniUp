@@ -7,13 +7,14 @@ import { clientAuth } from "@/lib/firebase/client";
 import { useEffect, useState } from "react";
 import { setLocale, setTheme } from "@/app/actions/prefs";
 import { Avatar } from "./Avatar";
+import { Bell, type BellItem } from "./Bell";
 import { Sidebar, type GalaxyNode } from "./Sidebar";
 import { isMuted, setMuted } from "./sound";
 import { useUi } from "./UiContext";
 
-type Me = { name: string; avatar: string; xp: number; level: number; current: number; needed: number; title: string; streak: number; isAdmin: boolean };
+type Me = { name: string; avatar: string; xp: number; level: number; current: number; needed: number; title: string; streak: number; visitStreak: number; isAdmin: boolean };
 
-export function Shell({ galaxies, me, theme, children }: { galaxies: GalaxyNode[]; me: Me; theme: string; children: React.ReactNode }) {
+export function Shell({ galaxies, me, theme, notifications, children }: { galaxies: GalaxyNode[]; me: Me; theme: string; notifications: BellItem[]; children: React.ReactNode }) {
   const { t, locale } = useUi();
   const [drawer, setDrawer] = useState(false);
   const [muted, setMutedState] = useState(false);
@@ -71,13 +72,19 @@ export function Shell({ galaxies, me, theme, children }: { galaxies: GalaxyNode[
               </div>
             </div>
           </Link>
+          {me.visitStreak > 0 && (
+            <span className="chip border-sky-500/40 text-sky-500 max-sm:hidden" title={t.visitStreak}>
+              🛰️ {me.visitStreak}
+            </span>
+          )}
           {me.streak > 0 && (
-            <span className="chip border-orange-500/40 text-orange-500" title={t.streak}>
+            <span className="chip border-orange-500/40 text-orange-500" title={t.taskStreak}>
               🔥 {me.streak}
             </span>
           )}
+          <Bell items={notifications} />
           <button
-            className="btn btn-ghost px-2.5"
+            className="btn btn-ghost px-2.5 max-sm:hidden"
             title="sound"
             onClick={() => {
               setMuted(!muted);
@@ -120,6 +127,9 @@ function AdminLinks({ onNavigate }: { onNavigate?: () => void }) {
       </Link>
       <Link href="/admin/roles" onClick={onNavigate} className="flex items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-[var(--bg-soft)]">
         🔐 {t.roles}
+      </Link>
+      <Link href="/admin/notifications" onClick={onNavigate} className="flex items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-[var(--bg-soft)]">
+        🔔 {t.notificationSettings}
       </Link>
     </div>
   );

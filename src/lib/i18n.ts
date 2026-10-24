@@ -63,6 +63,8 @@ const ka = {
   chooseAvatar: "აირჩიე ავატარი",
   achievements: "მიღწევები",
   streak: "სტრიქი",
+  taskStreak: "სტრიქი — ზედიზედ შესრულებული დღეები",
+  visitStreak: "სტრიქი — ზედიზედ შემოსვლის დღეები",
   days: "დღე",
   tasksDone: "შესრულებული",
   onlyAdminDone: "Done-ში გადატანა მხოლოდ ადმინს შეუძლია",
@@ -98,6 +100,12 @@ const ka = {
   access: "წვდომა",
   signingIn: "შესვლა...",
   emailLinkPrompt: "დაადასტურე მეილი, რომელზეც ლინკი მოგივიდა",
+  notifications: "შეტყობინებები",
+  markAllRead: "ყველა წაკითხულია",
+  noNotifications: "ახალი შეტყობინება არ არის ✨",
+  enablePush: "ბრაუზერის შეტყობინებების ჩართვა",
+  pushEnabled: "ბრაუზერის შეტყობინებები ჩართულია ✅",
+  notificationSettings: "შეტყობინებების პარამეტრები",
 };
 
 export type Dict = typeof ka;
@@ -164,6 +172,8 @@ const en: Dict = {
   chooseAvatar: "Choose an avatar",
   achievements: "Achievements",
   streak: "Streak",
+  taskStreak: "Streak — days in a row with work handed in",
+  visitStreak: "Streak — days in a row you came in",
   days: "days",
   tasksDone: "Completed",
   onlyAdminDone: "Only an admin can move tasks to Done",
@@ -199,6 +209,12 @@ const en: Dict = {
   access: "Access",
   signingIn: "Signing in...",
   emailLinkPrompt: "Confirm the email the link was sent to",
+  notifications: "Notifications",
+  markAllRead: "Mark all read",
+  noNotifications: "No new notifications ✨",
+  enablePush: "Enable browser notifications",
+  pushEnabled: "Browser notifications are on ✅",
+  notificationSettings: "Notification settings",
 };
 
 export const DICTS: Record<Locale, Dict> = { ka, en };

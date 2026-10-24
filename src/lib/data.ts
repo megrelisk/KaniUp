@@ -34,6 +34,10 @@ export const col = {
   activity: () => fs().collection("activity"),
   xpEvents: () => fs().collection("xpEvents"),
   pings: () => fs().collection("pings"),
+  // Per-user subcollection so "latest first" needs no composite index.
+  notifications: (userId: string) => fs().collection("users").doc(userId).collection("notifications"),
+  settings: () => fs().collection("settings"),
+  reminders: () => fs().collection("reminders"),
   counters: () => fs().collection("counters"),
 };
 

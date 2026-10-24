@@ -10,7 +10,8 @@ import { requireUser } from "@/lib/session";
 import { INVITE_TTL_MS } from "@/lib/invitations";
 import { mailLayout, sendMail } from "@/lib/mail";
 import { PERMISSIONS } from "@/lib/roles";
-import type { GrantDoc, InvitationDoc, OverrideDoc, Permission, RoleDoc, ScopeType, UserDoc } from "@/lib/types";
+import type { GrantDoc, InvitationDoc, NotifyChannel, NotifyEvent, OverrideDoc, Permission, RoleDoc, ScopeType, UserDoc } from "@/lib/types";
+import { deliverTest, loadNotifySettings, NOTIFY_CHANNELS, NOTIFY_EVENTS } from "@/lib/notify";
 
 const scopeType = z.enum(["GALAXY", "FOLDER", "PLANET"]);
 
@@ -161,4 +162,26 @@ export async function setRolePermission(roleId: string, permission: Permission, 
     if (allowed !== null) await col.overrides().add({ roleId, permission, allowed, scopeType: scope.type, scopeId: scope.id } satisfies Omit<OverrideDoc, "id">);
   }
   revalidatePath("/admin", "layout");
+}
+
+// ─── Notification settings ───────────────────────────────────────────────
+
+/** Turns one channel of one event on or off for everyone (admin only). */
+export async function setNotifyChannel(event: NotifyEvent, channel: NotifyChannel, on: boolean) {
+  const user = await requireUser();
+  await assertCan(user, "MANAGE_ROLES", []);
+  if (!NOTIFY_EVENTS.includes(event) || !NOTIFY_CHANNELS.includes(channel)) throw new Error("unknown");
+  const settings = await loadNotifySettings();
+  const list = new Set(settings[event]);
+  if (on) list.add(channel);
+  else list.delete(channel);
+  await col.settings().doc("notifications").set({ ...settings, [event]: [...list] });
+  revalidatePath("/admin/notifications");
+}
+
+/** Sends a test message to the admin through every channel, to check SMTP / SMS / push setup. */
+export async function sendTestNotification() {
+  const user = await requireUser();
+  await assertCan(user, "MANAGE_ROLES", []);
+  await deliverTest(user.id);
 }

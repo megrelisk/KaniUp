@@ -115,7 +115,14 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { key: "streak_30", icon: "🌞", ka: "სუპერნოვა", en: "Supernova", descKa: "30 დღე ზედიზედ", descEn: "30-day streak" },
   { key: "on_time_10", icon: "⏱️", ka: "დროის ოსტატი", en: "Time Master", descKa: "10 თასქი დედლაინამდე", descEn: "10 tasks before the deadline" },
   { key: "tasks_50", icon: "🛰️", ka: "ორბიტული სადგური", en: "Space Station", descKa: "50 შესრულებული თასქი", descEn: "50 completed tasks" },
+  { key: "visit_7", icon: "🛰️", ka: "ორბიტაზე", en: "In Orbit", descKa: "7 დღე ზედიზედ სისტემაში", descEn: "Visited 7 days in a row" },
+  { key: "visit_30", icon: "🌍", ka: "მუდმივი ორბიტა", en: "Stable Orbit", descKa: "30 დღე ზედიზედ სისტემაში", descEn: "Visited 30 days in a row" },
   { key: "legendary_1", icon: "👑", ka: "ლეგენდის მკვლელი", en: "Legend Slayer", descKa: "Legendary თასქი შესრულდა", descEn: "Completed a Legendary task" },
+];
+
+export const VISIT_MILESTONES: [number, string][] = [
+  [7, "visit_7"],
+  [30, "visit_30"],
 ];
 
 export const STREAK_MILESTONES: [number, string][] = [

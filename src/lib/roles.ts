@@ -18,7 +18,7 @@ export const PERMISSIONS: Permission[] = [
 ];
 
 /** The Owner is not a role document: owners always have every permission. */
-export const OWNER_META = { icon: "🌟", ka: "ვარსკვლავთშემოქმედი", en: "Starforger" };
+export const OWNER_META = { icon: "🌟", ka: "შემოქმედი", en: "Creator" };
 
 /** Roles created on first start. Admins can rename them, change them and add new ones. */
 export const DEFAULT_ROLES: RoleDoc[] = [
@@ -41,7 +41,8 @@ export const DEFAULT_ROLES: RoleDoc[] = [
     scopedOnly: false,
     position: 2,
   },
-  { id: "alien", name: "უცხოპლანეტელი", nameEn: "Alien Visitor", icon: "👽", permissions: ["VIEW", "COMMENT"], scopedOnly: true, position: 3 },
+  { id: "guest", name: "სტუმარი", nameEn: "Guest", icon: "👽", permissions: ["VIEW", "COMMENT"], scopedOnly: true, position: 3 },
 ];
 
 export const DEFAULT_ROLE_ID = "astronaut";
+export const GUEST_ROLE_ID = "guest";

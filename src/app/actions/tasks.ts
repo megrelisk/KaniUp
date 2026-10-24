@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/session";
 import { evenShares, taskXp } from "@/lib/game";
 import { payOut, recordHandIn, revokePayout, type Reward } from "@/lib/gamify";
 import type { TaskDoc } from "@/lib/types";
+import { adminIds, ergative, notify, taskUrl } from "@/lib/notify";
 
 const difficulty = z.enum(["EASY", "NORMAL", "HARD", "EPIC", "LEGENDARY"]);
 const priority = z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]);
@@ -89,6 +90,12 @@ export async function createTask(input: CreateTaskInput) {
   const ref = await col.tasks().add(task);
   if (data.tags.length) await setTags(ref.id, data.tags);
   await logActivity(ref.id, user.id, "created", { title: task.title });
+  await notify(
+    "assigned",
+    task.assigneeIds,
+    { title: `ახალი მისია: ${task.title}`, body: `${ergative(user.name)} მოგანიჭა თასქი პლანეტაზე „${planet.name}“`, url: taskUrl({ id: ref.id, planetId: task.planetId }), taskId: ref.id },
+    user.id,
+  );
   await changed({ id: ref.id, planetId: task.planetId });
   return { id: ref.id, number: task.number };
 }
@@ -176,6 +183,15 @@ export async function moveTask(taskId: string, statusId: string, position?: numb
     if (target.kind === "REVIEW" && task.assigneeIds.includes(user.id)) result.streakAchievements = await recordHandIn(user.id);
     if (intoDone) result.rewards = await payOut(updated);
     if (outOfDone) await revokePayout(taskId);
+
+    const url = taskUrl(task);
+    if (target.kind === "REVIEW") {
+      await notify("review", [task.creatorId, ...(await adminIds())], { title: `შემოწმებაზეა: ${task.title}`, body: `${ergative(user.name)} ჩააბარა თასქი`, url, taskId }, user.id);
+    }
+    for (const r of result.rewards) {
+      await notify("done", [r.userId], { title: `დადასტურდა: ${task.title}`, body: `+${r.xp} XP 🪙`, url, taskId }, user.id);
+      if (r.levelUp) await notify("level_up", [r.userId], { title: `ახალი ლეველი: ${r.levelUp}! 🚀`, body: task.title, url: "/profile" });
+    }
   }
   await changed(task);
   return result;
@@ -188,6 +204,8 @@ export async function setAssignees(taskId: string, userIds: string[]) {
   const ids = [...new Set(z.array(z.string()).parse(userIds))];
   await col.tasks().doc(taskId).update({ assigneeIds: ids, xpShares: sharesFor(ids), updatedAt: now() });
   await logActivity(taskId, user.id, "assignees", { userIds: ids });
+  const added = ids.filter((id) => !task.assigneeIds.includes(id));
+  await notify("assigned", added, { title: `ახალი მისია: ${task.title}`, body: `${ergative(user.name)} მოგანიჭა თასქი`, url: taskUrl(task), taskId }, user.id);
   await changed(task);
 }
 

@@ -1,6 +1,6 @@
 import "server-only";
 import { all, col, FieldValue, now, one } from "./data";
-import { levelFromXp, nextStreak, splitXp, STREAK_MILESTONES, tbilisiDay } from "./game";
+import { levelFromXp, nextStreak, splitXp, STREAK_MILESTONES, tbilisiDay, VISIT_MILESTONES } from "./game";
 import type { TaskDoc, UserDoc, XpEventDoc } from "./types";
 
 export type Reward = { userId: string; xp: number; levelUp?: number; achievements: string[] };
@@ -22,6 +22,15 @@ export async function recordHandIn(userId: string): Promise<string[]> {
   const streak = nextStreak(user.streak, user.lastStreakDay, today);
   await col.users().doc(userId).update({ streak, bestStreak: Math.max(user.bestStreak, streak), lastStreakDay: today });
   return unlock(user, STREAK_MILESTONES.filter(([n]) => streak >= n).map(([, key]) => key));
+}
+
+/** Called on every visit; advances the "came in today" streak once per Tbilisi day. */
+export async function recordVisit(user: UserDoc): Promise<string[]> {
+  const today = tbilisiDay(new Date());
+  if (user.lastVisitDay === today) return [];
+  const streak = nextStreak(user.visitStreak ?? 0, user.lastVisitDay ?? null, today);
+  await col.users().doc(user.id).update({ visitStreak: streak, bestVisitStreak: Math.max(user.bestVisitStreak ?? 0, streak), lastVisitDay: today });
+  return unlock(user, VISIT_MILESTONES.filter(([n]) => streak >= n).map(([, key]) => key));
 }
 
 /** Called when a task reaches Done: pays out XP to assignees according to their shares. */

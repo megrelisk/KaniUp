@@ -1,5 +1,6 @@
 import { Avatar } from "@/components/Avatar";
 import { ProfileEditor } from "@/components/ProfileEditor";
+import { EnablePush } from "@/components/EnablePush";
 import { all, col, loadRoles } from "@/lib/data";
 import { ACHIEVEMENTS, activeStreak, levelProgress, tbilisiDay, TITLES, titleForLevel } from "@/lib/game";
 import { OWNER_META } from "@/lib/roles";
@@ -46,8 +47,14 @@ export default async function ProfilePage() {
           </div>
           <div>
             <div className="text-2xl font-extrabold text-orange-500">🔥 {streak}</div>
-            <div className="muted text-xs">
-              {t.streak} (max {user.bestStreak})
+            <div className="muted text-xs" title={t.taskStreak}>
+              {locale === "ka" ? "შესრულების სტრიქი" : "Work streak"} (max {user.bestStreak})
+            </div>
+          </div>
+          <div>
+            <div className="text-2xl font-extrabold text-sky-500">🛰️ {user.visitStreak ?? 0}</div>
+            <div className="muted text-xs" title={t.visitStreak}>
+              {locale === "ka" ? "შემოსვლის სტრიქი" : "Visit streak"} (max {user.bestVisitStreak ?? 0})
             </div>
           </div>
         </div>
@@ -78,6 +85,15 @@ export default async function ProfilePage() {
             </span>
           ))}
         </div>
+      </section>
+
+      <section className="panel space-y-3 p-5">
+        <h2 className="text-sm font-bold">🔔 {t.notifications}</h2>
+        <EnablePush />
+        <p className="muted text-xs">
+          ✉️ {user.email}
+          {user.phone ? ` · 📱 ${user.phone}` : ""}
+        </p>
       </section>
 
       <section className="panel p-5">

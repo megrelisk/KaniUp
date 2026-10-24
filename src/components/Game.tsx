@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { ACHIEVEMENTS, titleForLevel } from "@/lib/game";
 import { playCash, playCoin, playLevelUp } from "./sound";
 import { useUi } from "./UiContext";
@@ -23,7 +23,7 @@ export function useGame() {
 
 let nextId = 1;
 
-export function GameProvider({ children }: { children: React.ReactNode }) {
+export function GameProvider({ children, unlocked = [] }: { children: React.ReactNode; unlocked?: string[] }) {
   const { t, locale, me } = useUi();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [levelUp, setLevelUp] = useState<number | null>(null);
@@ -55,6 +55,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     },
     [me.id, t, locale, toast],
   );
+
+  // Achievements unlocked by today's visit (computed on the server).
+  const unlockedKey = unlocked.join(",");
+  useEffect(() => {
+    if (!unlockedKey) return;
+    playCoin();
+    for (const key of unlockedKey.split(",")) {
+      const a = ACHIEVEMENTS.find((x) => x.key === key);
+      if (a) toast(`${a[locale]} — ${locale === "ka" ? a.descKa : a.descEn}`, "achievement", a.icon);
+    }
+  }, [unlockedKey, locale, toast]);
 
   return (
     <GameCtx.Provider value={{ celebrate, toast }}>

@@ -6,6 +6,7 @@ import { col, FieldValue, getTaskOrThrow, loadUsers, now, one, ping } from "@/li
 import { assertCan, isAdmin, taskPath } from "@/lib/access";
 import { requireUser } from "@/lib/session";
 import type { CommentDoc } from "@/lib/types";
+import { ergative, notify, taskUrl } from "@/lib/notify";
 
 const body = z.string().trim().min(1).max(10_000);
 
@@ -36,6 +37,16 @@ export async function addComment(taskId: string, text: string, parentId?: string
     createdAt: now(),
   } satisfies Omit<CommentDoc, "id">);
   await col.tasks().doc(taskId).update({ commentCount: FieldValue.increment(1) });
+  const mentionedIds = mentioned.map((u) => u.id);
+  const preview = value.length > 140 ? value.slice(0, 140) + "…" : value;
+  const url = taskUrl(task);
+  await notify("mention", mentionedIds, { title: `${ergative(user.name)} მოგნიშნა: ${task.title}`, body: preview, url, taskId }, user.id);
+  await notify(
+    "comment",
+    [...task.assigneeIds, task.creatorId].filter((id) => !mentionedIds.includes(id)),
+    { title: `ახალი კომენტარი: ${task.title}`, body: `${user.name}: ${preview}`, url, taskId },
+    user.id,
+  );
   await changed(taskId);
 }
 
